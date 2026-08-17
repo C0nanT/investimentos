@@ -1,4 +1,4 @@
-[https://drive.google.com/drive/folders/1F5VqMXGUT0344gHOrBvuk66-6bduGGi4?hl=pt-br](https://drive.google.com/drive/folders/1F5VqMXGUT0344gHOrBvuk66-6bduGGi4?hl=pt-br)
+Lives: [https://drive.google.com/drive/folders/1F5VqMXGUT0344gHOrBvuk66-6bduGGi4?hl=pt-br](https://drive.google.com/drive/folders/1F5VqMXGUT0344gHOrBvuk66-6bduGGi4?hl=pt-br)
 
 # Fase 2:
 
@@ -80,7 +80,7 @@
 ---
 
 #### Triagem quantitativa:
-  - Usar o site: https://www.fundamentus.com.br/fii_resultado.php para puxar os fundos e tabelar eles no google sheets.
+  - Usar o site: [https://www.fundamentus.com.br/fii_resultado.php](https://www.fundamentus.com.br/fii_resultado.php) para puxar os fundos e tabelar eles no google sheets.
 1. Liquidez, remover fundos com menos de 2 milhões.
 2. Dividend Yield, remover fundos com mais de 18%, e com menos de 1% de spread.
 3. Tirar fundos com P/VP abaixo de 0.8, e com mais de 1.2.
@@ -113,7 +113,17 @@
   - Indicador de endividamento da empresa.
   - Revisar o grau de endividamento da empresa, geralmente fica em 50% até 80%.
   - Preferir valores baixos, menores que 3, pois quanto mais baixo, menos endividada a empresa está, maior que 3 é suspeito, tomar cuidado, as empresas de energia são exceções e podem ficar entre 3 e 5, pois tem fluxo de caixa previsível.
-> OBS: nas seguradoras ela pode ficar negativa
+> OBS: nas seguradoras ela pode ficar negativa, e isso *NÃO* é ruim.
 
 #### Triagem quantitativa:
+  - (Não mostrou na aula, necessário criar)
   
+---
+
+#### Valuation pelo fluxo de caixa descontado:
+> O valor de uma empresa é a soma dos seus fluxos de caixas futuros corrigido a valor presente atravez de uma taxa, chegando ao seu valor presente líquido, que é o valor real da empresa hoje.
+> Fluxo de Caixa aos Acionistas (FCA) = Lucro Líquido (LL)
+> Preço teto é importante para saber se a empresa está cara ou barata.
+  - Valor Presente Teto = Fluxo de Caixa / (1 + taxa de desconto(SELIC, CDI, etc))^1 + Fluxo de Caixa / (1 + taxa de desconto(SELIC, CDI, etc))^2 + ... + Fluxo de Caixa / (1 + taxa de desconto(SELIC, CDI, etc))^n
+    - Fazer n = 10 anos para prever os 10 anos futuros.
+    - 
