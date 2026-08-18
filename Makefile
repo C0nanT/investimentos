@@ -3,11 +3,10 @@
 
 PY      := .venv/bin/python
 PORTA   ?= 8000
-PRESET  ?= dividendos
 
 .DEFAULT_GOAL := ajuda
 
-.PHONY: ajuda venv up sync web start status parar reiniciar logs mongosh acoes fiis csv limpar-cache reset
+.PHONY: ajuda venv up sync web start status parar reiniciar logs mongosh limpar-cache reset
 
 ajuda:  ## mostra esta lista de comandos
 	@echo "Painel de investimentos — comandos disponíveis:"
@@ -15,7 +14,7 @@ ajuda:  ## mostra esta lista de comandos
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[1m%-14s\033[0m %s\n", $$1, $$2}'
 	@echo
-	@echo "Variáveis: PORTA=$(PORTA)  PRESET=$(PRESET)"
+	@echo "Variável: PORTA=$(PORTA)"
 
 $(PY):
 	python3 -m venv .venv
@@ -52,16 +51,6 @@ logs:  ## acompanha o log do MongoDB
 
 mongosh: up  ## abre o shell do MongoDB no banco investimentos
 	docker exec -it investimentos-mongo mongosh investimentos
-
-acoes: $(PY)  ## lista ações no terminal (make acoes PRESET=valor)
-	$(PY) -m invest.cli acoes --banco --preset $(PRESET)
-
-fiis: $(PY)  ## lista FIIs no terminal (make fiis PRESET=fii-renda)
-	$(PY) -m invest.cli fiis --banco --preset $(PRESET)
-
-csv: $(PY)  ## exporta a seleção do preset para data/*.csv
-	$(PY) -m invest.cli acoes --banco --preset $(PRESET) --csv data/acoes-$(PRESET).csv -n 0
-	@echo "arquivo em data/acoes-$(PRESET).csv"
 
 limpar-cache:  ## apaga o cache local (força novo download no próximo sync)
 	rm -f data/acoes.json data/fiis.json

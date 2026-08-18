@@ -32,7 +32,8 @@ cotação ou série de dividendos por papel.
 make start        # cria o venv, sobe o Mongo, atualiza os dados e abre o painel
 ```
 
-`make` sozinho lista todos os comandos:
+Toda a consulta acontece no painel web. O terminal serve só para operar o
+serviço. `make` sozinho lista os comandos:
 
 | Comando | O que faz |
 |---|---|
@@ -41,8 +42,6 @@ make start        # cria o venv, sobe o Mongo, atualiza os dados e abre o painel
 | `make sync` | baixa do Fundamentus e grava no banco |
 | `make web` | painel em http://localhost:8000 (`make web PORTA=9000`) |
 | `make status` | estado do container e do banco |
-| `make acoes` / `make fiis` | lista no terminal (`make acoes PRESET=valor`) |
-| `make csv` | exporta a seleção para `data/*.csv` |
 | `make mongosh` | shell do MongoDB |
 | `make parar` | para o container (dados preservados) |
 | `make limpar-cache` | apaga o cache local |
@@ -53,9 +52,13 @@ Sem Make, os comandos equivalentes:
 ```bash
 docker compose up -d
 python3 -m venv .venv && .venv/bin/pip install pymongo
-.venv/bin/python -m invest.cli sync
-.venv/bin/python -m invest.cli web
+.venv/bin/python -m invest.cli sync      # atualiza os dados
+.venv/bin/python -m invest.cli web       # sobe o painel
+.venv/bin/python -m invest.cli status    # estado do banco
 ```
+
+Esses três são os únicos comandos que existem: filtrar, ordenar e exportar é
+tudo pelo painel.
 
 O painel tem abas Ações/FIIs, os presets em um menu, campos de mín/máx para
 cada indicador, ordenação clicando na coluna, link para a página do papel no
@@ -89,9 +92,10 @@ O que acontece em cada sync:
    É daí que sai, com o tempo, a resposta para "esse DY se repete ou foi um
    ano fora da curva?".
 
-Sobre o cache de 12h: ele só vale para a CLI lendo sem `--banco`
-(`invest.cli acoes`). O `sync` e o botão do painel sempre ignoram o cache e
-buscam dados novos. Use `make limpar-cache` para descartá-lo.
+O cache de 12h em `data/*.json` guarda o último download bruto e serve de
+rede de segurança (`sync --cache` regrava sem internet). O `sync` normal e o
+botão do painel sempre ignoram o cache e buscam dados novos.
+Use `make limpar-cache` para descartá-lo.
 
 Frequência que faz sentido: o Fundamentus recalcula os múltiplos com o preço
 do fechamento, então **uma vez por dia, depois do pregão, é suficiente** —
@@ -123,26 +127,45 @@ docker exec -it investimentos-mongo mongosh investimentos
 
 Configurável por `MONGO_URI` e `MONGO_DB`.
 
-## Uso pela linha de comando
+## O painel
 
-```bash
-.venv/bin/python -m invest.cli status         # estado do banco
-.venv/bin/python -m invest.cli acoes --banco --preset dividendos   # lê do Mongo
-python3 -m invest.cli presets                  # lista os presets prontos
-python3 -m invest.cli acoes --preset dividendos
-python3 -m invest.cli fiis  --preset fii-renda
-python3 -m invest.cli acoes --campos           # todos os campos filtráveis
+Tudo acontece em http://localhost:8000:
 
-# critérios livres
-python3 -m invest.cli acoes -f "dy>=6" -f "pvp<=2" -f "roe>=15" --ordenar roe
-python3 -m invest.cli acoes -f "pl=5:15" -f "div_liq_patrim<=1" -n 0
+- abas **Ações** e **FIIs**;
+- menu de **presets** (os limites do preset aparecem nos campos, prontos para
+  afrouxar ou apertar);
+- campos de **mín/máx** para cada indicador;
+- **ordenação** clicando no título da coluna;
+- caixa **considerar zeros** (veja abaixo);
+- **Baixar CSV** com o resultado atual — todos os campos do documento, não só
+  as colunas visíveis, prontos para o LibreOffice/Excel;
+- **Atualizar do Fundamentus**, que refaz o sync sem sair da tela;
+- o papel é um link para a ficha completa no Fundamentus.
 
-# preset + ajuste + exportação
-python3 -m invest.cli fiis --preset fii-renda -f "pvp<=0.9" --csv data/selecao.csv
-```
+Dá para salvar um link direto do preset:
+`http://localhost:8000/?tipo=fiis&preset=fii-aula`.
 
-Sintaxe de filtro: `campo>=valor`, `campo<=valor`, `campo=min:max`.
-Percentuais são o número em si (`dy>=6` = 6%).
+## Triagem da aula (FIIs)
+
+Preset `fii-aula`, seguindo `notes/aula-live-geracao-dividendos.md`:
+
+1. liquidez acima de R$ 2 milhões;
+2. DY no máximo 18% e com pelo menos 1% de spread sobre o IPCA+ mais curto do
+   Tesouro (padrão 8,17% → DY mínimo 9,17%);
+3. P/VP entre 0,8 e 1,2;
+4. rank de DY (maior primeiro) + rank de P/VP (menor primeiro) = **nota**, e a
+   nota ordena o resultado (menor = melhor colocação combinada). Empates
+   recebem o mesmo rank.
+
+Escolha o preset **fii-aula** na aba FIIs. Ele mostra dois campos extras,
+**IPCA+** e **spread**, que recalculam o DY mínimo na hora — 1% para fundos de
+ancoragem, 3% para crescimento, 5% para os com risco, como a aula orienta.
+Confira a taxa atual em [tesourodireto.com.br](https://www.tesourodireto.com.br/produtos/dados-sobre-titulos/rendimento-dos-titulos)
+— o valor 8,17% é o que estava na anotação, não é atualizado sozinho.
+
+O que a aula pede e o Fundamentus **não** fornece: vacância física e financeira
+separadas (só há vacância média) e alavancagem bruta (passivos/ativos). Esses
+dois ficam para a análise individual, no relatório gerencial do fundo.
 
 ## Presets
 
@@ -153,16 +176,28 @@ Percentuais são o número em si (`dy>=6` = 6%).
 | `qualidade` | ações | ROE ≥ 15%, ROIC ≥ 12%, margem líq. ≥ 8%, baixa alavancagem |
 | `fii-renda` | FIIs | DY 8–20%, P/VP 0,5–1,05, liquidez ≥ R$500k, vacância ≤ 15% |
 | `fii-tijolo-desconto` | FIIs | P/VP ≤ 0,95, cap rate ≥ 6%, com imóveis |
+| `fii-aula` | FIIs | a triagem descrita acima, com rank e nota |
 
 Editar os presets: `invest/filtros.py`.
+
+## O que é filtrado (e o que não é)
+
+**Nada é descartado na coleta.** As 994 ações e os 560 FIIs do Fundamentus
+entram no MongoDB com todas as colunas, e a página sem preset mostra os 994 e
+os 560. Todo filtro acontece na consulta, é seu e é reversível.
+
+A única regra automática: **um campo com filtro não pode valer 0**, porque no
+Fundamentus zero quase sempre significa dado ausente — filtrar
+`vacância ≤ 10%` sem essa regra traria 486 FIIs, sendo 412 deles fundos de
+papel que simplesmente não têm vacância. A caixa **"considerar zeros"** no
+painel desliga a regra quando você quiser o dado cru.
 
 ## Cuidados de leitura
 
 - O teto de DY nos presets existe de propósito: yield acima de ~20% quase
   sempre é dividendo extraordinário não recorrente.
 - No Fundamentus, `0` normalmente significa **dado indisponível**, não zero
-  real — por isso um campo zerado reprova critérios de mínimo. Bancos, por
-  exemplo, aparecem com ROIC e margens zeradas.
+  real. Bancos aparecem com ROIC e margens zeradas.
 - FIIs de papel (CRI) aparecem com cap rate, vacância e qtd de imóveis em zero:
   eles não têm imóvel.
 - A triagem é ponto de partida, não recomendação. Múltiplo baixo com frequência
@@ -176,10 +211,10 @@ invest/db.py            MongoDB: gravação, índices, consultas e histórico
 invest/web.py           servidor local + API JSON
 invest/painel.html      página do painel
 invest/filtros.py       critérios, presets e ordenação
-invest/cli.py           interface de linha de comando
+invest/cli.py           comandos de operação (sync, web, status)
 docker-compose.yml      MongoDB 7
 notes/                  anotações de estudo
 ```
 
-Sem `--banco`, a CLI lê o cache em `data/*.json` e funciona mesmo com o
-container desligado.
+O cache em `data/*.json` guarda o último download bruto; o painel sempre lê do
+MongoDB.

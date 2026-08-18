@@ -83,18 +83,24 @@ def consultar(
     ordenar_por: str | None = None,
     crescente: bool = False,
     limite: int = 0,
+    zeros_valem: bool = False,
 ) -> list[dict]:
-    """Traduz os criterios (campo, minimo, maximo) para um filtro do Mongo."""
+    """Traduz os criterios (campo, minimo, maximo) para um filtro do Mongo.
+
+    Por padrao, um campo com criterio nao pode valer 0: no Fundamentus o zero
+    quase sempre significa dado ausente (bancos sem ROIC, FIIs de papel sem
+    vacancia nem cap rate), e deixa-lo passar polui a triagem. Com
+    zeros_valem=True o zero conta como numero de verdade.
+    """
     consulta: dict = {}
     for campo, minimo, maximo in criterios or []:
         faixa: dict = {}
         if minimo is not None:
             faixa["$gte"] = minimo
-            # Zero no Fundamentus quase sempre significa dado ausente.
-            if minimo > 0:
-                faixa["$ne"] = 0
         if maximo is not None:
             faixa["$lte"] = maximo
+        if faixa and not zeros_valem:
+            faixa["$ne"] = 0
         if faixa:
             consulta[campo] = faixa
 

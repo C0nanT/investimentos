@@ -43,6 +43,13 @@ COLUNAS = {
     ],
 }
 
+# Colunas exibidas apenas quando o preset calcula ranking.
+COLUNAS_RANK = [
+    ("rank_dy", "Rank DY", "inteiro"),
+    ("rank_pvp", "Rank P/VP", "inteiro"),
+    ("nota", "Nota", "inteiro"),
+]
+
 
 class Manipulador(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802 (nome exigido pelo BaseHTTPRequestHandler)
@@ -56,10 +63,14 @@ class Manipulador(BaseHTTPRequestHandler):
                 return self._enviar_json({
                     "colunas": {t: [{"chave": c, "titulo": r, "formato": f} for c, r, f in cols]
                                 for t, cols in COLUNAS.items()},
+                    "colunas_rank": [{"chave": c, "titulo": r, "formato": f} for c, r, f in COLUNAS_RANK],
                     "presets": {n: {"descricao": p["descricao"], "tipo": p["tipo"],
                                     "criterios": p["criterios"], "ordenar_por": p["ordenar_por"],
-                                    "crescente": p.get("crescente", False)}
+                                    "crescente": p.get("crescente", False),
+                                    "ranquear": p.get("ranquear")}
                                 for n, p in filtros.PRESETS.items()},
+                    "taxa_base": filtros.TAXA_BASE_PADRAO,
+                    "spread": filtros.SPREAD_PADRAO,
                     "percentuais": sorted(fundamentus.COLUNAS_PERCENTUAIS),
                     "status": db.status(),
                 })
@@ -81,17 +92,42 @@ class Manipulador(BaseHTTPRequestHandler):
         preset = (parametros.get("preset") or [""])[0]
         ordenar_por = (parametros.get("ordenar") or [""])[0] or None
         crescente = (parametros.get("crescente") or ["0"])[0] == "1"
+        zeros = (parametros.get("zeros") or ["0"])[0] == "1"
+        ranquear_por = None
+        descricao = None
+
         if preset and preset in filtros.PRESETS:
             config = filtros.PRESETS[preset]
+            if preset == "fii-aula":
+                config = filtros.preset_fii_aula(
+                    float((parametros.get("taxa_base") or [filtros.TAXA_BASE_PADRAO])[0]),
+                    float((parametros.get("spread") or [filtros.SPREAD_PADRAO])[0]),
+                )
             criterios = list(config["criterios"]) + criterios
             ordenar_por = ordenar_por or config["ordenar_por"]
+            ranquear_por = config.get("ranquear")
+            descricao = config["descricao"]
+            if ordenar_por == "nota":
+                crescente = True
 
-        documentos = db.consultar(tipo, criterios, ordenar_por, crescente)
+        # Com ranking, o Mongo devolve tudo e a ordenacao acontece depois de
+        # calcular a nota (que so existe dentro do recorte filtrado).
+        documentos = db.consultar(
+            tipo, criterios,
+            None if ranquear_por else ordenar_por,
+            crescente, zeros_valem=zeros,
+        )
+        if ranquear_por:
+            documentos = filtros.ranquear(documentos, ranquear_por)
+            documentos = filtros.ordenar(documentos, ordenar_por or "nota", crescente)
+
         return {
             "tipo": tipo,
             "total": db.banco()[tipo].count_documents({}),
             "encontrados": len(documentos),
             "criterios": criterios,
+            "descricao": descricao,
+            "ranqueado": bool(ranquear_por),
             "registros": db.serializavel(documentos),
         }
 

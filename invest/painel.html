@@ -46,6 +46,10 @@
   .botao { cursor: pointer; font-weight: 500; }
   .botao:hover { border-color: var(--destaque); color: var(--destaque); }
   .botao[disabled] { opacity: .55; cursor: progress; }
+  .opcao { display: flex; align-items: center; gap: 6px; color: var(--suave); font-size: 13px; cursor: pointer; }
+  .spread { display: flex; align-items: center; gap: 6px; color: var(--suave); font-size: 13px; }
+  .spread input { width: 76px; padding: 5px 7px; }
+  .descricao { color: var(--suave); font-size: 12.5px; margin-bottom: 10px; font-style: italic; }
   .filtros {
     background: var(--painel); border: 1px solid var(--borda); border-radius: 10px;
     padding: 12px 14px; margin-bottom: 14px;
@@ -94,9 +98,18 @@
     </div>
     <select id="preset"><option value="">— sem preset —</option></select>
     <button class="botao" id="limpar">Limpar filtros</button>
+    <label class="opcao" title="No Fundamentus, 0 quase sempre é dado ausente. Marque para tratá-lo como número real.">
+      <input type="checkbox" id="zeros"> considerar zeros
+    </label>
+    <span class="spread" id="caixa-spread" hidden>
+      IPCA+ <input type="number" step="0.01" id="taxa-base" value="8.17"> %
+      + spread <input type="number" step="0.5" id="spread" value="1"> %
+    </span>
+    <button class="botao" id="csv">Baixar CSV</button>
     <button class="botao" id="sync">Atualizar do Fundamentus</button>
   </div>
 
+  <div class="descricao" id="descricao"></div>
   <div class="filtros" id="filtros"></div>
   <div class="resumo" id="resumo"></div>
   <div class="tabela-caixa"><table><thead id="cabecalho"></thead><tbody id="corpo"></tbody></table></div>
@@ -110,12 +123,14 @@
 </main>
 
 <script>
-const estado = { tipo: "acoes", config: null, ordenar: null, crescente: false, filtros: {} };
+const estado = { tipo: "acoes", config: null, ordenar: null, crescente: false,
+                 filtros: {}, preset: "", ranqueado: false, zeros: false };
 const $ = (id) => document.getElementById(id);
 
 const fmt = {
   texto: (v) => v ?? "-",
   numero: (v) => v == null ? "-" : v.toFixed(2),
+  inteiro: (v) => v == null ? "-" : v.toFixed(0),
   reais: (v) => v == null ? "-" : "R$ " + v.toFixed(2),
   percentual: (v) => v == null ? "-" : v.toFixed(1) + "%",
   compacto: (v) => {
@@ -142,9 +157,19 @@ async function iniciar() {
   if (estado.config.erro) return falhar(
     "O servidor respondeu com erro: <code>" + estado.config.erro + "</code>. " +
     "Se for de conexão, suba o banco com <code>docker compose up -d</code>.");
-  montarPresets();
   mostrarStatus();
-  trocarTipo("acoes");
+  // Permite abrir direto num preset: /?tipo=fiis&preset=fii-aula
+  const url = new URLSearchParams(location.search);
+  const tipo = url.get("tipo") === "fiis" ? "fiis" : "acoes";
+  const preset = url.get("preset");
+  const comPreset = Boolean(preset && estado.config.presets[preset]?.tipo === tipo);
+  trocarTipo(tipo, !comPreset);   // sem preset, trocarTipo ja carrega sozinho
+  if (comPreset) {
+    $("preset").value = preset;
+    preencherFiltrosDoPreset(preset);
+    montarFiltros();
+    carregar();
+  }
 }
 
 function falhar(mensagem) {
@@ -194,7 +219,9 @@ function montarFiltros() {
       const valor = entrada.value.trim();
       if (valor === "") delete estado.filtros[chave][lado];
       else estado.filtros[chave][lado] = Number(valor);
-      if (!Object.keys(estado.filtros[chave]).length) delete estado.filtros[chave];
+      estado.filtros[chave].editado = true;
+      if (!Object.keys(estado.filtros[chave]).some((k) => k === "min" || k === "max"))
+        delete estado.filtros[chave];
       carregar();
     });
   });
@@ -202,25 +229,37 @@ function montarFiltros() {
 
 function preencherFiltrosDoPreset(nome) {
   estado.filtros = {};
-  if (!nome) return;
+  estado.preset = nome;
+  $("caixa-spread").hidden = nome !== "fii-aula";
+  if (!nome) { estado.ranqueado = false; $("descricao").textContent = ""; return; }
   const preset = estado.config.presets[nome];
+  // Os limites do preset viram campos preenchidos, para você ver e ajustar.
   for (const [chave, minimo, maximo] of preset.criterios) {
     estado.filtros[chave] = {};
     if (minimo !== null) estado.filtros[chave].min = minimo;
     if (maximo !== null) estado.filtros[chave].max = maximo;
   }
+  estado.ranqueado = Boolean(preset.ranquear);
   estado.ordenar = preset.ordenar_por;
   estado.crescente = preset.crescente;
+  $("descricao").textContent = preset.descricao;
 }
 
 function parametros() {
   const p = new URLSearchParams();
   for (const [chave, faixa] of Object.entries(estado.filtros)) {
+    if (estado.preset && !faixa.editado) continue;  // já vem do preset no servidor
     if (faixa.min !== undefined) p.append("f", `${chave}>=${faixa.min}`);
     if (faixa.max !== undefined) p.append("f", `${chave}<=${faixa.max}`);
   }
   if (estado.ordenar) p.set("ordenar", estado.ordenar);
   if (estado.crescente) p.set("crescente", "1");
+  if (estado.zeros) p.set("zeros", "1");
+  if (estado.preset) {
+    p.set("preset", estado.preset);
+    p.set("taxa_base", $("taxa-base").value);
+    p.set("spread", $("spread").value);
+  }
   return p;
 }
 
@@ -236,6 +275,8 @@ async function carregar() {
     $("corpo").innerHTML = `<tr><td class="erro" colspan="20">${dados.erro}</td></tr>`;
     return;
   }
+  estado.ranqueado = dados.ranqueado ?? estado.ranqueado;
+  estado.registros = dados.registros;
   $("resumo").innerHTML =
     `<b>${dados.encontrados}</b> de ${dados.total} ${estado.tipo === "acoes" ? "ações" : "FIIs"} passaram no filtro` +
     (estado.ordenar ? ` · ordenado por <b>${estado.ordenar}</b> ${estado.crescente ? "↑" : "↓"}` : "");
@@ -243,7 +284,9 @@ async function carregar() {
 }
 
 function desenharTabela(registros) {
-  const colunas = estado.config.colunas[estado.tipo];
+  const colunas = estado.ranqueado
+    ? estado.config.colunas[estado.tipo].concat(estado.config.colunas_rank)
+    : estado.config.colunas[estado.tipo];
   $("cabecalho").innerHTML = "<tr>" + colunas.map((c) =>
     `<th data-chave="${c.chave}" class="${estado.ordenar === c.chave ? "ordenada" : ""}">${c.titulo}${
       estado.ordenar === c.chave ? (estado.crescente ? " ↑" : " ↓") : ""}</th>`).join("") + "</tr>";
@@ -280,9 +323,13 @@ function desenharTabela(registros) {
   }).join("") + "</tr>").join("");
 }
 
-function trocarTipo(tipo) {
+function trocarTipo(tipo, carregarAgora = true) {
   estado.tipo = tipo;
   estado.filtros = {};
+  estado.preset = "";
+  estado.ranqueado = false;
+  $("descricao").textContent = "";
+  $("caixa-spread").hidden = true;
   estado.ordenar = tipo === "acoes" ? "dy" : "dy";
   estado.crescente = false;
   document.querySelectorAll(".abas button").forEach((b) =>
@@ -290,7 +337,7 @@ function trocarTipo(tipo) {
   $("preset").value = "";
   montarPresets();
   montarFiltros();
-  carregar();
+  if (carregarAgora) carregar();
 }
 
 document.querySelectorAll(".abas button").forEach((botao) =>
@@ -302,8 +349,37 @@ $("preset").addEventListener("change", (e) => {
   carregar();
 });
 
+$("csv").addEventListener("click", () => {
+  const registros = estado.registros || [];
+  if (!registros.length) return alert("Nada para exportar.");
+  // Exporta todos os campos do documento, não só as colunas visíveis.
+  const campos = [...new Set(registros.flatMap((r) => Object.keys(r)))]
+    .filter((c) => c !== "tipo" && c !== "atualizado_em");
+  const escapar = (v) => {
+    const texto = v == null ? "" : String(v);
+    return /[",;\n]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
+  };
+  const linhas = [campos.join(","),
+    ...registros.map((r) => campos.map((c) => escapar(r[c])).join(","))];
+  const nome = `${estado.tipo}${estado.preset ? "-" + estado.preset : ""}-` +
+    new Date().toISOString().slice(0, 10) + ".csv";
+  const blob = new Blob(["\uFEFF" + linhas.join("\n")], { type: "text/csv;charset=utf-8" });
+  const link = Object.assign(document.createElement("a"),
+    { href: URL.createObjectURL(blob), download: nome });
+  link.click();
+  URL.revokeObjectURL(link.href);
+});
+
+$("zeros").addEventListener("change", (e) => { estado.zeros = e.target.checked; carregar(); });
+["taxa-base", "spread"].forEach((id) =>
+  $(id).addEventListener("change", () => { preencherFiltrosDoPreset(estado.preset); montarFiltros(); carregar(); }));
+
 $("limpar").addEventListener("click", () => {
   estado.filtros = {};
+  estado.preset = "";
+  estado.ranqueado = false;
+  $("descricao").textContent = "";
+  $("caixa-spread").hidden = true;
   $("preset").value = "";
   montarFiltros();
   carregar();

@@ -1,12 +1,42 @@
-"""Filtros e ordenacao sobre os registros do Fundamentus."""
+"""Filtros, ranking e ordenacao sobre os registros do Fundamentus."""
 
 from __future__ import annotations
 
-from typing import Callable, Iterable
+from typing import Iterable
+
+# Taxa do IPCA+ mais curto do Tesouro Direto, base do spread exigido dos FIIs.
+# Conferir em https://www.tesourodireto.com.br/produtos/dados-sobre-titulos/rendimento-dos-titulos
+TAXA_BASE_PADRAO = 8.17
+SPREAD_PADRAO = 1.0
+
+
+def preset_fii_aula(taxa_base: float = TAXA_BASE_PADRAO, spread: float = SPREAD_PADRAO) -> dict:
+    """Triagem quantitativa de FIIs descrita em notes/aula-live-geracao-dividendos.md.
+
+    1. liquidez minima de R$ 2 milhoes;
+    2. DY de no maximo 18% e com pelo menos `spread` acima do IPCA+ do Tesouro;
+    3. P/VP entre 0,8 e 1,2;
+    4. rank de DY (maior primeiro) + rank de P/VP (menor primeiro) = nota final.
+    """
+    dy_minimo = round(taxa_base + spread, 2)
+    return {
+        "descricao": (f"Triagem da aula: liquidez > R$2mi, DY {dy_minimo}%–18% "
+                      f"(IPCA+{taxa_base}% + spread {spread}%), P/VP 0,8–1,2, rank DY+P/VP"),
+        "tipo": "fiis",
+        "criterios": [
+            ("liquidez", 2_000_000, None),
+            ("dy", dy_minimo, 18.0),
+            ("pvp", 0.8, 1.2),
+        ],
+        "ordenar_por": "nota",
+        "crescente": True,
+        "ranquear": [("dy", False), ("pvp", True)],
+    }
 
 # Presets: pontos de partida para nao ter que lembrar de todo criterio.
 # Cada valor eh (chave, minimo, maximo); None = sem limite daquele lado.
 PRESETS: dict[str, dict] = {
+    "fii-aula": preset_fii_aula(),
     "dividendos": {
         "descricao": "Acoes pagadoras: DY alto, lucro real, endividamento sob controle",
         "tipo": "acoes",
@@ -79,9 +109,9 @@ def aplicar(
 ) -> list[dict]:
     """Mantem apenas os registros que satisfazem todos os criterios.
 
-    No Fundamentus, "0" costuma significar dado indisponivel. Por isso um
-    valor ausente ou zerado reprova quando o criterio exige um minimo; quando
-    o criterio so impoe um teto (divida, vacancia), zero passa normalmente.
+    No Fundamentus, "0" costuma significar dado indisponivel, entao um campo
+    com criterio nao pode valer 0 — a menos que incluir_nulos seja True, que
+    aceita zeros e campos ausentes como valores legitimos.
     """
     criterios = list(criterios)
     resultado = []
@@ -95,7 +125,7 @@ def aplicar(
 def _passa(valor, minimo, maximo, incluir_nulos: bool) -> bool:
     if valor is None:
         return incluir_nulos
-    if valor == 0 and minimo is not None and minimo > 0 and not incluir_nulos:
+    if valor == 0 and not incluir_nulos:
         return False
     if minimo is not None and valor < minimo:
         return False
@@ -128,3 +158,35 @@ def parse_criterio(expressao: str) -> tuple[str, float | None, float | None]:
         minimo, _, maximo = faixa.partition(":")
         return (chave.strip(), float(minimo) if minimo else None, float(maximo) if maximo else None)
     raise ValueError(f"criterio invalido: {expressao!r} (use dy>=6, pvp<=1.2 ou pl=5:15)")
+
+
+def ranquear(registros: list[dict], campos: Iterable[tuple[str, bool]]) -> list[dict]:
+    """Adiciona rank_<campo> para cada campo e a coluna `nota` (soma dos ranks).
+
+    Cada par e (campo, crescente): crescente=True significa que o menor valor
+    recebe o rank 1 (caso do P/VP); False, que o maior recebe o rank 1 (DY).
+    Empates recebem o mesmo rank. Nota menor = melhor colocacao combinada.
+    """
+    campos = list(campos)
+    registros = [dict(r) for r in registros]
+
+    for campo, crescente in campos:
+        validos = [r for r in registros if isinstance(r.get(campo), (int, float))]
+        ordenados = sorted(validos, key=lambda r: r[campo], reverse=not crescente)
+
+        posicao, anterior, rank = 0, object(), 0
+        for registro in ordenados:
+            posicao += 1
+            if registro[campo] != anterior:
+                rank = posicao
+                anterior = registro[campo]
+            registro[f"rank_{campo}"] = rank
+
+        for registro in registros:
+            registro.setdefault(f"rank_{campo}", None)
+
+    for registro in registros:
+        ranks = [registro.get(f"rank_{campo}") for campo, _ in campos]
+        registro["nota"] = sum(ranks) if all(r is not None for r in ranks) else None
+
+    return registros
