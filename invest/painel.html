@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel de investimentos</title>
+<style>
+  :root {
+    --fundo: #f6f7f9; --painel: #fff; --borda: #e2e5ea; --texto: #1a1d21;
+    --suave: #6b7280; --destaque: #1f6feb; --bom: #137a3d; --ruim: #b3261e;
+    --zebra: #fafbfc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fundo: #0f1216; --painel: #171b21; --borda: #262c35; --texto: #e6e9ee;
+      --suave: #98a1ad; --destaque: #58a6ff; --bom: #3fb950; --ruim: #f85149;
+      --zebra: #1b2027;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--fundo); color: var(--texto);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    padding: 18px 22px; border-bottom: 1px solid var(--borda); background: var(--painel);
+    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  }
+  h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  .status { color: var(--suave); font-size: 12.5px; }
+  main { padding: 18px 22px 60px; }
+  .barra {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .abas { display: flex; gap: 4px; background: var(--painel); border: 1px solid var(--borda); border-radius: 8px; padding: 3px; }
+  .abas button {
+    border: 0; background: transparent; color: var(--suave); padding: 6px 14px;
+    border-radius: 6px; cursor: pointer; font: inherit; font-weight: 500;
+  }
+  .abas button.ativa { background: var(--destaque); color: #fff; }
+  select, input, .botao {
+    font: inherit; padding: 7px 10px; border-radius: 7px;
+    border: 1px solid var(--borda); background: var(--painel); color: var(--texto);
+  }
+  .botao { cursor: pointer; font-weight: 500; }
+  .botao:hover { border-color: var(--destaque); color: var(--destaque); }
+  .botao[disabled] { opacity: .55; cursor: progress; }
+  .filtros {
+    background: var(--painel); border: 1px solid var(--borda); border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 14px;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px 14px;
+  }
+  .campo { display: flex; flex-direction: column; gap: 4px; }
+  .campo label { font-size: 11.5px; color: var(--suave); text-transform: uppercase; letter-spacing: .04em; }
+  .campo div { display: flex; gap: 5px; }
+  .campo input { width: 100%; min-width: 0; padding: 5px 7px; }
+  .resumo { color: var(--suave); margin-bottom: 10px; font-size: 13px; }
+  .resumo b { color: var(--texto); }
+  .tabela-caixa { overflow-x: auto; border: 1px solid var(--borda); border-radius: 10px; background: var(--painel); }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { padding: 7px 11px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--borda); }
+  th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+  thead th {
+    position: sticky; top: 0; background: var(--painel); cursor: pointer;
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--suave);
+    user-select: none; z-index: 1;
+  }
+  thead th:hover { color: var(--destaque); }
+  thead th.ordenada { color: var(--destaque); }
+  tbody tr:nth-child(even) { background: var(--zebra); }
+  tbody tr:hover { background: color-mix(in srgb, var(--destaque) 10%, transparent); }
+  td.papel a { color: var(--destaque); font-weight: 600; text-decoration: none; }
+  td.papel a:hover { text-decoration: underline; }
+  .pos { color: var(--bom); } .neg { color: var(--ruim); }
+  .vazio, .erro { padding: 30px; text-align: center; color: var(--suave); white-space: normal; line-height: 1.7; }
+  .erro { color: var(--ruim); }
+  .vazio code, .erro code { background: var(--zebra); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+  .erro a { color: var(--destaque); }
+  .nota { margin-top: 16px; color: var(--suave); font-size: 12.5px; max-width: 70ch; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Painel de investimentos</h1>
+  <span class="status" id="status">carregando…</span>
+</header>
+
+<main>
+  <div class="barra">
+    <div class="abas">
+      <button data-tipo="acoes" class="ativa">Ações</button>
+      <button data-tipo="fiis">FIIs</button>
+    </div>
+    <select id="preset"><option value="">— sem preset —</option></select>
+    <button class="botao" id="limpar">Limpar filtros</button>
+    <button class="botao" id="sync">Atualizar do Fundamentus</button>
+  </div>
+
+  <div class="filtros" id="filtros"></div>
+  <div class="resumo" id="resumo"></div>
+  <div class="tabela-caixa"><table><thead id="cabecalho"></thead><tbody id="corpo"></tbody></table></div>
+
+  <p class="nota">
+    No Fundamentus, <b>0</b> normalmente significa dado indisponível — bancos aparecem com ROIC e
+    margens zerados, e FIIs de papel (CRI) com vacância, cap rate e nº de imóveis em zero.
+    DY acima de ~20% costuma ser dividendo extraordinário não recorrente.
+    Triagem é ponto de partida, não recomendação.
+  </p>
+</main>
+
+<script>
+const estado = { tipo: "acoes", config: null, ordenar: null, crescente: false, filtros: {} };
+const $ = (id) => document.getElementById(id);
+
+const fmt = {
+  texto: (v) => v ?? "-",
+  numero: (v) => v == null ? "-" : v.toFixed(2),
+  reais: (v) => v == null ? "-" : "R$ " + v.toFixed(2),
+  percentual: (v) => v == null ? "-" : v.toFixed(1) + "%",
+  compacto: (v) => {
+    if (v == null) return "-";
+    const a = Math.abs(v);
+    if (a >= 1e9) return (v / 1e9).toFixed(1) + " bi";
+    if (a >= 1e6) return (v / 1e6).toFixed(1) + " mi";
+    if (a >= 1e3) return (v / 1e3).toFixed(0) + " mil";
+    return v.toFixed(0);
+  },
+};
+
+async function iniciar() {
+  // Aberto via file:// a API nao existe: avisa em vez de deixar a tela vazia.
+  if (location.protocol === "file:") return falhar(
+    "Esta página precisa do servidor local. Rode <code>.venv/bin/python -m invest.cli web</code> " +
+    "e acesse <a href='http://localhost:8000'>http://localhost:8000</a> — abrir o arquivo direto não carrega os dados.");
+  try {
+    const resposta = await fetch("/api/config");
+    estado.config = await resposta.json();
+  } catch (erro) {
+    return falhar("Não consegui falar com o servidor. Ele ainda está rodando? (<code>invest.cli web</code>)");
+  }
+  if (estado.config.erro) return falhar(
+    "O servidor respondeu com erro: <code>" + estado.config.erro + "</code>. " +
+    "Se for de conexão, suba o banco com <code>docker compose up -d</code>.");
+  montarPresets();
+  mostrarStatus();
+  trocarTipo("acoes");
+}
+
+function falhar(mensagem) {
+  $("status").textContent = "sem conexão";
+  $("resumo").innerHTML = "";
+  $("corpo").innerHTML = `<tr><td class="erro" colspan="20">${mensagem}</td></tr>`;
+}
+
+function mostrarStatus() {
+  const s = estado.config.status.colecoes;
+  $("status").textContent =
+    `MongoDB · ${s.acoes.documentos} ações e ${s.fiis.documentos} FIIs · ` +
+    `atualizado em ${s.acoes.atualizado_em ?? "—"} · ` +
+    `${estado.config.status.historico.dias} dia(s) de histórico`;
+}
+
+function montarPresets() {
+  const seletor = $("preset");
+  seletor.innerHTML = '<option value="">— sem preset —</option>';
+  for (const [nome, p] of Object.entries(estado.config.presets)) {
+    if (p.tipo !== estado.tipo) continue;
+    const opcao = document.createElement("option");
+    opcao.value = nome;
+    opcao.textContent = `${nome} — ${p.descricao}`;
+    seletor.appendChild(opcao);
+  }
+}
+
+function montarFiltros() {
+  const caixa = $("filtros");
+  caixa.innerHTML = "";
+  for (const col of estado.config.colunas[estado.tipo]) {
+    if (col.formato === "texto") continue;
+    const atual = estado.filtros[col.chave] || {};
+    const campo = document.createElement("div");
+    campo.className = "campo";
+    campo.innerHTML = `<label>${col.titulo}</label><div>
+      <input type="number" step="any" placeholder="mín" data-chave="${col.chave}" data-lado="min" value="${atual.min ?? ""}">
+      <input type="number" step="any" placeholder="máx" data-chave="${col.chave}" data-lado="max" value="${atual.max ?? ""}">
+    </div>`;
+    caixa.appendChild(campo);
+  }
+  caixa.querySelectorAll("input").forEach((entrada) => {
+    entrada.addEventListener("change", () => {
+      const { chave, lado } = entrada.dataset;
+      estado.filtros[chave] = estado.filtros[chave] || {};
+      const valor = entrada.value.trim();
+      if (valor === "") delete estado.filtros[chave][lado];
+      else estado.filtros[chave][lado] = Number(valor);
+      if (!Object.keys(estado.filtros[chave]).length) delete estado.filtros[chave];
+      carregar();
+    });
+  });
+}
+
+function preencherFiltrosDoPreset(nome) {
+  estado.filtros = {};
+  if (!nome) return;
+  const preset = estado.config.presets[nome];
+  for (const [chave, minimo, maximo] of preset.criterios) {
+    estado.filtros[chave] = {};
+    if (minimo !== null) estado.filtros[chave].min = minimo;
+    if (maximo !== null) estado.filtros[chave].max = maximo;
+  }
+  estado.ordenar = preset.ordenar_por;
+  estado.crescente = preset.crescente;
+}
+
+function parametros() {
+  const p = new URLSearchParams();
+  for (const [chave, faixa] of Object.entries(estado.filtros)) {
+    if (faixa.min !== undefined) p.append("f", `${chave}>=${faixa.min}`);
+    if (faixa.max !== undefined) p.append("f", `${chave}<=${faixa.max}`);
+  }
+  if (estado.ordenar) p.set("ordenar", estado.ordenar);
+  if (estado.crescente) p.set("crescente", "1");
+  return p;
+}
+
+async function carregar() {
+  $("corpo").innerHTML = `<tr><td class="vazio" colspan="20">carregando…</td></tr>`;
+  let dados;
+  try {
+    dados = await (await fetch(`/api/${estado.tipo}?` + parametros())).json();
+  } catch (erro) {
+    return falhar("Perdi a conexão com o servidor local.");
+  }
+  if (dados.erro) {
+    $("corpo").innerHTML = `<tr><td class="erro" colspan="20">${dados.erro}</td></tr>`;
+    return;
+  }
+  $("resumo").innerHTML =
+    `<b>${dados.encontrados}</b> de ${dados.total} ${estado.tipo === "acoes" ? "ações" : "FIIs"} passaram no filtro` +
+    (estado.ordenar ? ` · ordenado por <b>${estado.ordenar}</b> ${estado.crescente ? "↑" : "↓"}` : "");
+  desenharTabela(dados.registros);
+}
+
+function desenharTabela(registros) {
+  const colunas = estado.config.colunas[estado.tipo];
+  $("cabecalho").innerHTML = "<tr>" + colunas.map((c) =>
+    `<th data-chave="${c.chave}" class="${estado.ordenar === c.chave ? "ordenada" : ""}">${c.titulo}${
+      estado.ordenar === c.chave ? (estado.crescente ? " ↑" : " ↓") : ""}</th>`).join("") + "</tr>";
+
+  $("cabecalho").querySelectorAll("th").forEach((th) => {
+    th.addEventListener("click", () => {
+      const chave = th.dataset.chave;
+      if (estado.ordenar === chave) estado.crescente = !estado.crescente;
+      else { estado.ordenar = chave; estado.crescente = false; }
+      carregar();
+    });
+  });
+
+  if (!registros.length) {
+    const vazio = estado.config.status.colecoes[estado.tipo].documentos === 0
+      ? "O banco está vazio. Rode <code>invest.cli sync</code> ou clique em “Atualizar do Fundamentus”."
+      : "nenhum papel passou. afrouxe algum critério.";
+    $("corpo").innerHTML = `<tr><td class="vazio" colspan="${colunas.length}">${vazio}</td></tr>`;
+    return;
+  }
+
+  $("corpo").innerHTML = registros.map((r) => "<tr>" + colunas.map((c) => {
+    const valor = r[c.chave];
+    const texto = fmt[c.formato](valor);
+    if (c.chave === "papel") {
+      const url = estado.tipo === "acoes"
+        ? `https://www.fundamentus.com.br/detalhes.php?papel=${valor}`
+        : `https://www.fundamentus.com.br/detalhes.php?papel=${valor}`;
+      return `<td class="papel"><a href="${url}" target="_blank" rel="noopener">${valor}</a></td>`;
+    }
+    const cor = (c.formato === "percentual" && typeof valor === "number" && valor !== 0)
+      ? (valor > 0 ? "pos" : "neg") : "";
+    return `<td class="${cor}">${texto}</td>`;
+  }).join("") + "</tr>").join("");
+}
+
+function trocarTipo(tipo) {
+  estado.tipo = tipo;
+  estado.filtros = {};
+  estado.ordenar = tipo === "acoes" ? "dy" : "dy";
+  estado.crescente = false;
+  document.querySelectorAll(".abas button").forEach((b) =>
+    b.classList.toggle("ativa", b.dataset.tipo === tipo));
+  $("preset").value = "";
+  montarPresets();
+  montarFiltros();
+  carregar();
+}
+
+document.querySelectorAll(".abas button").forEach((botao) =>
+  botao.addEventListener("click", () => trocarTipo(botao.dataset.tipo)));
+
+$("preset").addEventListener("change", (e) => {
+  preencherFiltrosDoPreset(e.target.value);
+  montarFiltros();
+  carregar();
+});
+
+$("limpar").addEventListener("click", () => {
+  estado.filtros = {};
+  $("preset").value = "";
+  montarFiltros();
+  carregar();
+});
+
+$("sync").addEventListener("click", async (e) => {
+  const botao = e.target;
+  botao.disabled = true;
+  botao.textContent = "atualizando…";
+  try {
+    const dados = await (await fetch("/api/sync")).json();
+    if (dados.erro) alert(dados.erro);
+    else { estado.config.status = dados.status; mostrarStatus(); await carregar(); }
+  } finally {
+    botao.disabled = false;
+    botao.textContent = "Atualizar do Fundamentus";
+  }
+});
+
+iniciar();
+</script>
+</body>
+</html>

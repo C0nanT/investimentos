@@ -124,6 +124,24 @@ Lives: [https://drive.google.com/drive/folders/1F5VqMXGUT0344gHOrBvuk66-6bduGGi4
 > O valor de uma empresa é a soma dos seus fluxos de caixas futuros corrigido a valor presente atravez de uma taxa, chegando ao seu valor presente líquido, que é o valor real da empresa hoje.
 > Fluxo de Caixa aos Acionistas (FCA) = Lucro Líquido (LL)
 > Preço teto é importante para saber se a empresa está cara ou barata.
-  - Valor Presente Teto = Fluxo de Caixa / (1 + taxa de desconto(SELIC, CDI, etc))^1 + Fluxo de Caixa / (1 + taxa de desconto(SELIC, CDI, etc))^2 + ... + Fluxo de Caixa / (1 + taxa de desconto(SELIC, CDI, etc))^n
-    - Fazer n = 10 anos para prever os 10 anos futuros.
-    - 
+
+``` revisar isso aqui
+- Valor Presente Teto = Lucro Líquido / (1 + taxa de desconto(SELIC))^1 + Lucro Líquido / (1 + taxa de desconto(SELIC, CDI, etc))^2 + ... + Lucro Líquido / (1 + taxa de desconto(SELIC, CDI, etc))^t
+- Fazer n = 10 anos para prever os 10 anos futuros.
+
+Formulas de preço teto:
+VPL = VF / (1 + r)^t
+VPL = (ultVF * (1+g)) / (r-g)
+
+Como calcular algo que ainda não explicou na aula:
+1. Pegar os últimos 6 meses de Lucro Líquido, multiplicar por 2 para ter o Lucro Líquido anual de forma conservadora.
+2. Pegar o payout médio, exemplo 80%.
+3. Pegar o ROE médio, exemplo 20%.
+4. Fazer a conta de (1 - payout) * ROE para ter o resultado da taxa esperada de crescimento, exemplo 4% 
+
+Para calcular o preço teto:
+1. Pegar o Lucro Líquido anual mais recente, se só tiver de 6 meses, multiplicar por 2 para ter o Lucro Líquido anual.
+2. Crescimento esperado, 3% a.a. ou da empresa específica.
+3. 
+```
+
