@@ -77,6 +77,15 @@
   td.papel a { color: var(--destaque); font-weight: 600; text-decoration: none; }
   td.papel a:hover { text-decoration: underline; }
   .pos { color: var(--bom); } .neg { color: var(--ruim); }
+  .incerto { color: var(--ruim); text-align: center; }
+  .ajuda {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 13px; height: 13px; margin-left: 4px; border-radius: 50%;
+    background: var(--borda); color: var(--suave); font-size: 10px;
+    font-weight: 700; font-style: normal; text-transform: none;
+    letter-spacing: normal; cursor: help; vertical-align: middle;
+  }
+  .ajuda:hover { background: var(--destaque); color: #fff; }
   .vazio, .erro { padding: 30px; text-align: center; color: var(--suave); white-space: normal; line-height: 1.7; }
   .erro { color: var(--ruim); }
   .vazio code, .erro code { background: var(--zebra); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
@@ -97,6 +106,7 @@
       <button data-tipo="fiis">FIIs</button>
     </div>
     <select id="preset"><option value="">— sem preset —</option></select>
+    <button class="botao" id="filtrar">Filtrar</button>
     <button class="botao" id="limpar">Limpar filtros</button>
     <label class="opcao" title="No Fundamentus, 0 quase sempre é dado ausente. Marque para tratá-lo como número real.">
       <input type="checkbox" id="zeros"> considerar zeros
@@ -222,7 +232,6 @@ function montarFiltros() {
       estado.filtros[chave].editado = true;
       if (!Object.keys(estado.filtros[chave]).some((k) => k === "min" || k === "max"))
         delete estado.filtros[chave];
-      carregar();
     });
   });
 }
@@ -289,7 +298,12 @@ function desenharTabela(registros) {
     : estado.config.colunas[estado.tipo];
   $("cabecalho").innerHTML = "<tr>" + colunas.map((c) =>
     `<th data-chave="${c.chave}" class="${estado.ordenar === c.chave ? "ordenada" : ""}">${c.titulo}${
+      c.descricao ? `<span class="ajuda" title="${c.descricao.replace(/"/g, "&quot;")}">?</span>` : ""}${
       estado.ordenar === c.chave ? (estado.crescente ? " ↑" : " ↓") : ""}</th>`).join("") + "</tr>";
+
+  $("cabecalho").querySelectorAll(".ajuda").forEach((icone) => {
+    icone.addEventListener("click", (e) => e.stopPropagation());
+  });
 
   $("cabecalho").querySelectorAll("th").forEach((th) => {
     th.addEventListener("click", () => {
@@ -313,9 +327,12 @@ function desenharTabela(registros) {
     const texto = fmt[c.formato](valor);
     if (c.chave === "papel") {
       const url = estado.tipo === "acoes"
-        ? `https://www.fundamentus.com.br/detalhes.php?papel=${valor}`
-        : `https://www.fundamentus.com.br/detalhes.php?papel=${valor}`;
+        ? `https://investidor10.com.br/acoes/${valor.toLowerCase()}/`
+        : `https://investidor10.com.br/fiis/${valor.toUpperCase()}/`;
       return `<td class="papel"><a href="${url}" target="_blank" rel="noopener">${valor}</a></td>`;
+    }
+    if (c.formato === "percentual" && valor === 0) {
+      return `<td class="incerto" title="Dado provavelmente ausente no Fundamentus (0%)">-</td>`;
     }
     const cor = (c.formato === "percentual" && typeof valor === "number" && valor !== 0)
       ? (valor > 0 ? "pos" : "neg") : "";
@@ -369,6 +386,8 @@ $("csv").addEventListener("click", () => {
   link.click();
   URL.revokeObjectURL(link.href);
 });
+
+$("filtrar").addEventListener("click", () => carregar());
 
 $("zeros").addEventListener("change", (e) => { estado.zeros = e.target.checked; carregar(); });
 ["taxa-base", "spread"].forEach((id) =>

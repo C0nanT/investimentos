@@ -94,15 +94,15 @@ def consultar(
     """
     consulta: dict = {}
     for campo, minimo, maximo in criterios or []:
-        faixa: dict = {}
+        if minimo is None and maximo is None:
+            continue
+        faixa: dict = consulta.setdefault(campo, {})
         if minimo is not None:
             faixa["$gte"] = minimo
         if maximo is not None:
             faixa["$lte"] = maximo
-        if faixa and not zeros_valem:
+        if not zeros_valem:
             faixa["$ne"] = 0
-        if faixa:
-            consulta[campo] = faixa
 
     cursor = banco()[tipo].find(consulta, {"_id": 0})
     if ordenar_por:

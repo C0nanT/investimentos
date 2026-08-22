@@ -14,40 +14,68 @@ PAGINA = Path(__file__).resolve().parent / "painel.html"
 
 COLUNAS = {
     "acoes": [
-        ("papel", "Papel", "texto"),
-        ("cotacao", "Cotação", "reais"),
-        ("dy", "DY", "percentual"),
-        ("pl", "P/L", "numero"),
-        ("pvp", "P/VP", "numero"),
-        ("roe", "ROE", "percentual"),
-        ("roic", "ROIC", "percentual"),
-        ("margem_liquida", "Mrg. Líq.", "percentual"),
-        ("ev_ebit", "EV/EBIT", "numero"),
-        ("div_liq_patrim", "Dív.Líq/PL", "numero"),
-        ("cagr_receita_5a", "CAGR Rec. 5a", "percentual"),
-        ("liquidez_2meses", "Liquidez 2m", "compacto"),
-        ("patrimonio_liquido", "Patrimônio", "compacto"),
+        ("papel", "Papel", "texto", "Código de negociação da ação na bolsa (ticker)."),
+        ("cotacao", "Cotação", "reais", "Preço atual de uma ação."),
+        ("dy", "DY", "percentual",
+         "Dividend Yield: quanto a empresa pagou em dividendos nos últimos 12 meses, "
+         "em relação à cotação atual."),
+        ("pl", "P/L", "numero",
+         "Preço sobre Lucro: quantos anos de lucro atual seriam necessários para "
+         "pagar o preço da ação. Quanto menor, em geral mais barata está a ação."),
+        ("pvp", "P/VP", "numero",
+         "Preço sobre Valor Patrimonial: compara a cotação com o patrimônio líquido "
+         "por ação. Abaixo de 1 sugere ação negociada abaixo do valor contábil."),
+        ("roe", "ROE", "percentual",
+         "Return on Equity: retorno que a empresa gera sobre o patrimônio líquido dos sócios."),
+        ("roic", "ROIC", "percentual",
+         "Return on Invested Capital: retorno que a empresa gera sobre o capital "
+         "total investido (próprio + de terceiros)."),
+        ("margem_liquida", "Mrg. Líq.", "percentual",
+         "Margem Líquida: percentual da receita que sobra como lucro líquido."),
+        ("ev_ebit", "EV/EBIT", "numero",
+         "Enterprise Value sobre EBIT: valor da empresa (incluindo dívida) dividido "
+         "pelo lucro operacional. Similar ao P/L, mas considera o endividamento."),
+        ("div_liq_patrim", "Dív.Líq/PL", "numero",
+         "Dívida Líquida sobre Patrimônio Líquido: nível de endividamento da empresa "
+         "em relação ao seu patrimônio."),
+        ("cagr_receita_5a", "CAGR Rec. 5a", "percentual",
+         "Crescimento anual composto da receita nos últimos 5 anos."),
+        ("liquidez_2meses", "Liquidez 2m", "compacto",
+         "Volume médio negociado por dia nos últimos 2 meses, em reais."),
+        ("patrimonio_liquido", "Patrimônio", "compacto", "Patrimônio líquido total da empresa."),
     ],
     "fiis": [
-        ("papel", "Papel", "texto"),
-        ("segmento", "Segmento", "texto"),
-        ("cotacao", "Cotação", "reais"),
-        ("dy", "DY", "percentual"),
-        ("pvp", "P/VP", "numero"),
-        ("ffo_yield", "FFO Yield", "percentual"),
-        ("cap_rate", "Cap Rate", "percentual"),
-        ("vacancia_media", "Vacância", "percentual"),
-        ("qtd_imoveis", "Imóveis", "numero"),
-        ("liquidez", "Liquidez", "compacto"),
-        ("valor_mercado", "Valor merc.", "compacto"),
+        ("papel", "Papel", "texto", "Código de negociação do fundo imobiliário na bolsa (ticker)."),
+        ("segmento", "Segmento", "texto",
+         "Tipo de ativo do fundo (ex.: lajes corporativas, shoppings, papel/recebíveis)."),
+        ("cotacao", "Cotação", "reais", "Preço atual de uma cota do fundo."),
+        ("dy", "DY", "percentual",
+         "Dividend Yield: quanto o fundo distribuiu em rendimentos nos últimos 12 meses, "
+         "em relação à cotação atual."),
+        ("pvp", "P/VP", "numero",
+         "Preço sobre Valor Patrimonial: compara a cotação da cota com o valor "
+         "patrimonial por cota. Abaixo de 1 sugere cota negociada abaixo do valor contábil."),
+        ("ffo_yield", "FFO Yield", "percentual",
+         "Funds From Operations Yield: geração de caixa operacional do fundo em relação "
+         "à cotação atual."),
+        ("cap_rate", "Cap Rate", "percentual",
+         "Taxa de capitalização: retorno operacional dos imóveis do fundo em relação "
+         "ao seu valor de mercado. Costuma ser 0 (indisponível) em fundos de papel/CRI."),
+        ("vacancia_media", "Vacância", "percentual",
+         "Percentual médio de área dos imóveis do fundo sem locação. Costuma ser 0 "
+         "(indisponível) em fundos de papel/CRI."),
+        ("qtd_imoveis", "Imóveis", "numero",
+         "Quantidade de imóveis na carteira do fundo. Costuma ser 0 em fundos de papel/CRI."),
+        ("liquidez", "Liquidez", "compacto", "Volume médio negociado por dia, em reais."),
+        ("valor_mercado", "Valor merc.", "compacto", "Valor de mercado total do fundo."),
     ],
 }
 
 # Colunas exibidas apenas quando o preset calcula ranking.
 COLUNAS_RANK = [
-    ("rank_dy", "Rank DY", "inteiro"),
-    ("rank_pvp", "Rank P/VP", "inteiro"),
-    ("nota", "Nota", "inteiro"),
+    ("rank_dy", "Rank DY", "inteiro", "Posição no ranking por Dividend Yield (1 = melhor)."),
+    ("rank_pvp", "Rank P/VP", "inteiro", "Posição no ranking por P/VP (1 = melhor)."),
+    ("nota", "Nota", "inteiro", "Nota final combinando os rankings usados no preset."),
 ]
 
 
@@ -61,9 +89,11 @@ class Manipulador(BaseHTTPRequestHandler):
                 return self._enviar_html(PAGINA.read_text(encoding="utf-8"))
             if rota.path == "/api/config":
                 return self._enviar_json({
-                    "colunas": {t: [{"chave": c, "titulo": r, "formato": f} for c, r, f in cols]
+                    "colunas": {t: [{"chave": c, "titulo": r, "formato": f, "descricao": d}
+                                     for c, r, f, d in cols]
                                 for t, cols in COLUNAS.items()},
-                    "colunas_rank": [{"chave": c, "titulo": r, "formato": f} for c, r, f in COLUNAS_RANK],
+                    "colunas_rank": [{"chave": c, "titulo": r, "formato": f, "descricao": d}
+                                      for c, r, f, d in COLUNAS_RANK],
                     "presets": {n: {"descricao": p["descricao"], "tipo": p["tipo"],
                                     "criterios": p["criterios"], "ordenar_por": p["ordenar_por"],
                                     "crescente": p.get("crescente", False),
