@@ -141,8 +141,13 @@ Tudo acontece em http://localhost:8000:
 - menu de **presets** (os limites do preset aparecem nos campos, prontos para
   afrouxar ou apertar; **Salvar preset** grava esses limites no banco e passa a
   ser o novo original daquele preset);
-- filtro por **setor** (ações), para comparar um papel com os pares; clicar no
-  setor na tabela aplica o mesmo recorte;
+- filtro por **principais setores e segmentos** (ações): rádios no recorte B3
+  (Financeiro, Consumo Cíclico, Utilidade Pública…) e em segmentos populares
+  (Bancos, Seguradoras); **Ver filtro completo** lista o restante dos setores
+  do Fundamentus; clicar no setor ou subsetor na tabela aplica o mesmo recorte;
+- filtro por **principais tipos** (FIIs): Fundo de Tijolo, Fundo de Papel,
+  Fundo Misto, Fundo de Fundos, Fundo de Desenvolvimento e Outro — inferidos
+  a partir do segmento e dos indicadores físicos do Fundamentus;
 - campos de **mín/máx** para cada indicador;
 - **ordenação** clicando no título da coluna;
 - caixa **considerar zeros** (veja abaixo);

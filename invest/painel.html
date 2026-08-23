@@ -5,17 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Painel de investimentos</title>
 <style>
-  :root {
+  :root, [data-tema="light"] {
     --fundo: #f6f7f9; --painel: #fff; --borda: #e2e5ea; --texto: #1a1d21;
     --suave: #6b7280; --destaque: #1f6feb; --bom: #137a3d; --ruim: #b3261e;
     --zebra: #fafbfc;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --fundo: #0f1216; --painel: #171b21; --borda: #262c35; --texto: #e6e9ee;
-      --suave: #98a1ad; --destaque: #58a6ff; --bom: #3fb950; --ruim: #f85149;
-      --zebra: #1b2027;
-    }
+  [data-tema="dark"] {
+    --fundo: #0f1216; --painel: #171b21; --borda: #262c35; --texto: #e6e9ee;
+    --suave: #98a1ad; --destaque: #58a6ff; --bom: #3fb950; --ruim: #f85149;
+    --zebra: #1b2027;
   }
   * { box-sizing: border-box; }
   body {
@@ -24,8 +22,16 @@
   }
   header {
     padding: 18px 22px; border-bottom: 1px solid var(--borda); background: var(--painel);
-    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
   }
+  .header-esq { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  .botao-tema {
+    font: inherit; font-size: 13px; font-weight: 500;
+    padding: 6px 12px; border-radius: 7px; cursor: pointer;
+    border: 1px solid var(--borda); background: var(--painel); color: var(--texto);
+    white-space: nowrap;
+  }
+  .botao-tema:hover { border-color: var(--destaque); color: var(--destaque); }
   h1 { font-size: 17px; margin: 0; font-weight: 600; }
   .status { color: var(--suave); font-size: 12.5px; }
   main { padding: 18px 22px 60px; }
@@ -90,13 +96,110 @@
   .erro { color: var(--ruim); }
   .vazio code, .erro code { background: var(--zebra); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
   .erro a { color: var(--destaque); }
+
+  .setores {
+    background: var(--painel); border: 1px solid var(--borda); border-radius: 10px;
+    padding: 12px 16px 10px; margin-bottom: 14px;
+  }
+  .setores[hidden] { display: none; }
+  .setores-cabeca {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 12px; margin-bottom: 6px;
+  }
+  .setores-cabeca h2 { font-size: 14px; margin: 0; font-weight: 600; }
+  .setores-cabeca button {
+    border: 0; background: none; color: var(--destaque); cursor: pointer;
+    font: inherit; font-size: 13px; padding: 0;
+  }
+  .setores-cabeca button:hover { text-decoration: underline; }
+  .setores-lista {
+    column-count: 3; column-gap: 0; column-rule: 1px solid var(--borda);
+  }
+  .setores-lista label {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 12px; border-radius: 6px;
+    break-inside: avoid; cursor: pointer; font-size: 13.5px;
+  }
+  .setores-lista label:hover {
+    background: color-mix(in srgb, var(--destaque) 8%, transparent);
+  }
+  .setores-lista label:has(input:checked) {
+    background: color-mix(in srgb, var(--destaque) 18%, var(--painel));
+    color: var(--destaque); font-weight: 600;
+  }
+  .setores-lista input[type="radio"] {
+    appearance: none; -webkit-appearance: none;
+    width: 16px; height: 16px; margin: 0; padding: 0; flex-shrink: 0;
+    border: 2px solid var(--suave); border-radius: 50%;
+    background: transparent; cursor: pointer;
+  }
+  .setores-lista input[type="radio"]:checked {
+    border-color: var(--destaque); background: var(--destaque);
+    box-shadow: inset 0 0 0 3px var(--painel);
+  }
+  .setores-extra { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--borda); }
+  .setores-extra h3 {
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--suave); margin: 0 0 4px; font-weight: 600;
+  }
+  @media (max-width: 720px) {
+    .setores-lista { column-count: 1; column-rule: none; }
+  }
   .nota { margin-top: 16px; color: var(--suave); font-size: 12.5px; max-width: 70ch; }
+
+  .modos { display: flex; gap: 4px; background: var(--painel); border: 1px solid var(--borda); border-radius: 8px; padding: 3px; }
+  .modos button {
+    border: 0; background: transparent; color: var(--suave); padding: 6px 14px;
+    border-radius: 6px; cursor: pointer; font: inherit; font-weight: 500;
+  }
+  .modos button.ativa { background: var(--destaque); color: #fff; }
+  .comparar-busca { position: relative; }
+  .comparar-busca input { width: 220px; }
+  .sugestoes {
+    position: absolute; top: calc(100% + 4px); left: 0; min-width: 260px; z-index: 5;
+    background: var(--painel); border: 1px solid var(--borda); border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.15); max-height: 260px; overflow-y: auto;
+  }
+  .sugestoes[hidden] { display: none; }
+  .sugestoes div {
+    padding: 7px 12px; cursor: pointer; display: flex; justify-content: space-between; gap: 10px;
+  }
+  .sugestoes div .segmento { color: var(--suave); font-size: 12px; }
+  .sugestoes div:hover, .sugestoes div.marcada { background: color-mix(in srgb, var(--destaque) 14%, transparent); }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; background: var(--painel);
+    border: 1px solid var(--borda); border-radius: 999px; padding: 4px 6px 4px 12px; font-size: 13px;
+  }
+  .chip button {
+    border: 0; background: none; color: var(--suave); cursor: pointer; font: inherit;
+    width: 18px; height: 18px; border-radius: 50%; line-height: 1;
+  }
+  .chip button:hover { background: var(--ruim); color: #fff; }
+  .comparar-contador { color: var(--suave); font-size: 12.5px; }
+  td.melhor { color: var(--bom); font-weight: 700; }
+  td.pior { color: var(--ruim); }
+  td.passa { text-align: center; }
+  .badge-passa { color: var(--bom); font-weight: 700; }
+  .badge-nao-passa { color: var(--ruim); }
 </style>
+<script>
+(function () {
+  var salvo = localStorage.getItem("tema-painel");
+  var tema = salvo === "light" || salvo === "dark"
+    ? salvo
+    : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.dataset.tema = tema;
+})();
+</script>
 </head>
 <body>
 <header>
-  <h1>Painel de investimentos</h1>
-  <span class="status" id="status">carregando…</span>
+  <div class="header-esq">
+    <h1>Painel de investimentos</h1>
+    <span class="status" id="status">carregando…</span>
+  </div>
+  <button type="button" class="botao-tema" id="tema" aria-label="Alternar tema"></button>
 </header>
 
 <main>
@@ -105,28 +208,71 @@
       <button data-tipo="acoes" class="ativa">Ações</button>
       <button data-tipo="fiis">FIIs</button>
     </div>
-    <select id="preset"><option value="">— sem preset —</option></select>
-    <select id="setor" hidden><option value="">— todos os setores —</option></select>
-    <button class="botao" id="filtrar">Filtrar</button>
-    <button class="botao" id="salvar" disabled>Salvar preset</button>
-    <button class="botao" id="limpar">Limpar filtros</button>
-    <label class="opcao" title="No Fundamentus, 0 quase sempre é dado ausente. Marque para tratá-lo como número real.">
+    <div class="modos" id="modos" hidden>
+      <button data-modo="triagem" class="ativa">Triagem</button>
+      <button data-modo="comparar">Comparar</button>
+    </div>
+    <select id="preset" class="modo-triagem"><option value="">— sem preset —</option></select>
+    <button class="botao modo-triagem" id="filtrar">Filtrar</button>
+    <button class="botao modo-triagem" id="salvar" disabled>Salvar preset</button>
+    <button class="botao modo-triagem" id="limpar">Limpar filtros</button>
+    <label class="opcao modo-triagem" title="No Fundamentus, 0 quase sempre é dado ausente. Marque para tratá-lo como número real.">
       <input type="checkbox" id="zeros"> considerar zeros
     </label>
-    <span class="spread" id="caixa-spread" hidden>
+    <span class="spread modo-triagem" id="caixa-spread" hidden>
       IPCA+ <input type="number" step="0.01" id="taxa-base" value="8.17"> %
       + spread <input type="number" step="0.5" id="spread" value="1"> %
     </span>
-    <button class="botao" id="csv">Baixar CSV</button>
+    <button class="botao modo-triagem" id="csv">Baixar CSV</button>
     <button class="botao" id="sync">Atualizar do Fundamentus</button>
   </div>
 
-  <div class="descricao" id="descricao"></div>
-  <div class="filtros" id="filtros"></div>
-  <div class="resumo" id="resumo"></div>
-  <div class="tabela-caixa"><table><thead id="cabecalho"></thead><tbody id="corpo"></tbody></table></div>
+  <div class="descricao modo-triagem" id="descricao"></div>
+  <section class="setores modo-triagem" id="caixa-setores" hidden>
+    <div class="setores-cabeca">
+      <h2 id="recorte-titulo">Principais setores e segmentos</h2>
+      <button type="button" id="filtro-completo">Ver filtro completo ↗</button>
+    </div>
+    <div class="setores-lista" id="setores-lista"></div>
+    <div class="setores-extra" id="setores-extra" hidden>
+      <h3>Outros setores</h3>
+      <div class="setores-lista" id="setores-outros"></div>
+    </div>
+  </section>
+  <div class="filtros modo-triagem" id="filtros"></div>
+  <div class="resumo modo-triagem" id="resumo"></div>
+  <div class="tabela-caixa modo-triagem" id="caixa-tabela-triagem">
+    <table><thead id="cabecalho"></thead><tbody id="corpo"></tbody></table>
+  </div>
 
-  <p class="nota">
+  <section class="modo-comparar" id="secao-comparar" hidden>
+    <div class="barra">
+      <div class="comparar-busca">
+        <input type="text" id="comparar-busca" placeholder="Buscar ticker (ex.: mxrf)" autocomplete="off">
+        <div class="sugestoes" id="comparar-sugestoes" hidden></div>
+      </div>
+      <span class="comparar-contador" id="comparar-contador">0 de 10 selecionados</span>
+      <button class="botao" id="comparar-limpar">Limpar seleção</button>
+      <label class="opcao" title="No Fundamentus, 0 quase sempre é dado ausente. Marque para tratá-lo como número real.">
+        <input type="checkbox" id="comparar-zeros"> considerar zeros
+      </label>
+      <label class="opcao">
+        <input type="checkbox" id="comparar-ranquear"> ranquear (fii-aula)
+      </label>
+      <span class="spread" id="comparar-caixa-spread" hidden>
+        IPCA+ <input type="number" step="0.01" id="comparar-taxa-base" value="8.17"> %
+        + spread <input type="number" step="0.5" id="comparar-spread" value="1"> %
+      </span>
+      <button class="botao" id="comparar-csv">Baixar CSV</button>
+    </div>
+    <div class="chips" id="comparar-chips"></div>
+    <div class="descricao" id="comparar-descricao"></div>
+    <div class="tabela-caixa">
+      <table><thead id="comparar-cabecalho"></thead><tbody id="comparar-corpo"></tbody></table>
+    </div>
+  </section>
+
+  <p class="nota modo-triagem">
     No Fundamentus, <b>0</b> normalmente significa dado indisponível — bancos aparecem com ROIC e
     margens zerados, e FIIs de papel (CRI) com vacância, cap rate e nº de imóveis em zero.
     DY acima de ~20% costuma ser dividendo extraordinário não recorrente.
@@ -135,9 +281,40 @@
 </main>
 
 <script>
-const estado = { tipo: "acoes", config: null, ordenar: null, crescente: false,
-                 filtros: {}, preset: "", ranqueado: false, zeros: false, setor: "" };
+const estado = { tipo: "acoes", modo: "triagem", config: null, ordenar: null, crescente: false,
+                 filtros: {}, preset: "", ranqueado: false, zeros: false,
+                 setor: "", subsetor: "", tipoFundo: "", completo: false };
+const estadoComparar = {
+  papeis: [], zeros: false, ranquear: false, registros: [],
+  colunasDestaque: {}, aprovados: null, ranqueadoResultado: false, naoEncontrados: [],
+  ordenar: null, crescente: false, sugestaoIndex: -1,
+};
 const $ = (id) => document.getElementById(id);
+
+const CHAVE_TEMA = "tema-painel";
+
+function rotuloTema(tema) {
+  return tema === "dark"
+    ? { texto: "☀ Modo claro", titulo: "Ativar modo claro" }
+    : { texto: "☾ Modo escuro", titulo: "Ativar modo escuro" };
+}
+
+function aplicarTema(tema) {
+  document.documentElement.dataset.tema = tema;
+  localStorage.setItem(CHAVE_TEMA, tema);
+  const botao = $("tema");
+  const { texto, titulo } = rotuloTema(tema);
+  botao.textContent = texto;
+  botao.title = titulo;
+  botao.setAttribute("aria-label", titulo);
+}
+
+function alternarTema() {
+  aplicarTema(document.documentElement.dataset.tema === "dark" ? "light" : "dark");
+}
+
+aplicarTema(document.documentElement.dataset.tema);
+$("tema").addEventListener("click", alternarTema);
 
 const fmt = {
   texto: (v) => v ?? "-",
@@ -176,6 +353,8 @@ async function iniciar() {
   const url = new URLSearchParams(location.search);
   const tipo = url.get("tipo") === "fiis" ? "fiis" : "acoes";
   const preset = url.get("preset");
+  const modoParam = url.get("modo") === "comparar" ? "comparar" : "triagem";
+  const papeisParam = [...new Set(url.getAll("papel").map((p) => p.trim().toUpperCase()).filter(Boolean))];
   const comPreset = Boolean(preset && estado.config.presets[preset]?.tipo === tipo);
   trocarTipo(tipo, !comPreset);   // sem preset, trocarTipo ja carrega sozinho
   if (comPreset) {
@@ -183,6 +362,12 @@ async function iniciar() {
     preencherFiltrosDoPreset(preset);
     montarFiltros();
     carregar();
+  }
+  // Deep link ?modo=comparar&tipo=fiis&papel=...&papel=... abre direto no comparador.
+  if (tipo === "fiis" && modoParam === "comparar") {
+    estadoComparar.papeis = papeisParam.slice(0, 10);
+    trocarModo("comparar");
+    atualizarUrlComparar();
   }
 }
 
@@ -216,18 +401,72 @@ function montarPresets() {
 }
 
 function montarSetores() {
-  const seletor = $("setor");
-  const atual = estado.setor;
-  seletor.innerHTML = '<option value="">— todos os setores —</option>';
-  for (const nome of estado.config.setores || []) {
-    const opcao = document.createElement("option");
-    opcao.value = nome;
-    opcao.textContent = nome;
-    seletor.appendChild(opcao);
+  const caixa = $("caixa-setores");
+  const isAcoes = estado.tipo === "acoes";
+  caixa.hidden = false;
+  $("filtro-completo").hidden = !isAcoes;
+  $("setores-extra").hidden = !isAcoes || !estado.completo;
+
+  if (isAcoes) {
+    montarRecorteAcoes();
+  } else {
+    montarRecorteFiis();
   }
-  seletor.value = atual && [...seletor.options].some((o) => o.value === atual) ? atual : "";
-  estado.setor = seletor.value;
-  seletor.hidden = estado.tipo !== "acoes";
+}
+
+function montarRecorteAcoes() {
+  $("recorte-titulo").textContent = "Principais setores e segmentos";
+  const principais = estado.config.setores_principais || [];
+  const atual = estado.subsetor || estado.setor || "Todos os setores";
+  const extras = (estado.config.setores || []).filter((s) => !principais.includes(s));
+  if (estado.subsetor && !principais.includes(estado.subsetor) && !extras.includes(estado.subsetor))
+    extras.push(estado.subsetor);
+  extras.sort((a, b) => a.localeCompare(b, "pt-BR"));
+  if (extras.includes(atual)) estado.completo = true;
+
+  const attr = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  const radio = (nome) => {
+    const valor = nome === "Todos os setores" ? "" : nome;
+    const checado = atual === nome ? " checked" : "";
+    return `<label><input type="radio" name="recorte-setor" value="${attr(valor)}"${checado}> ${nome}</label>`;
+  };
+
+  $("setores-lista").innerHTML = principais.map(radio).join("");
+  $("setores-outros").innerHTML = extras.map(radio).join("");
+  $("filtro-completo").textContent = estado.completo ? "Ver só os principais" : "Ver filtro completo ↗";
+
+  $("caixa-setores").querySelectorAll('input[name="recorte-setor"]').forEach((entrada) => {
+    entrada.addEventListener("change", () => {
+      estado.subsetor = "";
+      estado.setor = entrada.value;
+      carregar();
+    });
+  });
+}
+
+function montarRecorteFiis() {
+  $("recorte-titulo").textContent = "Principais tipos";
+  estado.setor = "";
+  estado.subsetor = "";
+  const principais = estado.config.tipos_principais_fii || [];
+  const atual = estado.tipoFundo || "Todos os Tipos";
+
+  const attr = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  const radio = (nome) => {
+    const valor = nome === "Todos os Tipos" ? "" : nome;
+    const checado = atual === nome ? " checked" : "";
+    return `<label><input type="radio" name="recorte-tipo-fundo" value="${attr(valor)}"${checado}> ${nome}</label>`;
+  };
+
+  $("setores-lista").innerHTML = principais.map(radio).join("");
+  $("setores-outros").innerHTML = "";
+
+  $("caixa-setores").querySelectorAll('input[name="recorte-tipo-fundo"]').forEach((entrada) => {
+    entrada.addEventListener("change", () => {
+      estado.tipoFundo = entrada.value;
+      carregar();
+    });
+  });
 }
 
 function montarFiltros() {
@@ -296,7 +535,12 @@ function parametros() {
   if (estado.ordenar) p.set("ordenar", estado.ordenar);
   if (estado.crescente) p.set("crescente", "1");
   if (estado.zeros) p.set("zeros", "1");
-  if (estado.setor) p.set("setor", estado.setor);
+  if (estado.tipo === "acoes") {
+    if (estado.subsetor) p.set("subsetor", estado.subsetor);
+    else if (estado.setor) p.set("setor", estado.setor);
+  } else if (estado.tipoFundo) {
+    p.set("tipo_fundo", estado.tipoFundo);
+  }
   if (estado.preset) {
     p.set("preset", estado.preset);
     p.set("taxa_base", $("taxa-base").value);
@@ -319,9 +563,13 @@ async function carregar() {
   }
   estado.ranqueado = dados.ranqueado ?? estado.ranqueado;
   estado.registros = dados.registros;
+  const recorte = estado.tipo === "acoes"
+    ? (estado.subsetor ? ` · segmento <b>${estado.subsetor}</b>`
+      : estado.setor ? ` · setor <b>${estado.setor}</b>` : "")
+    : (estado.tipoFundo ? ` · tipo <b>${estado.tipoFundo}</b>` : "");
   $("resumo").innerHTML =
     `<b>${dados.encontrados}</b> de ${dados.total} ${estado.tipo === "acoes" ? "ações" : "FIIs"} passaram no filtro` +
-    (estado.setor ? ` · setor <b>${estado.setor}</b>` : "") +
+    recorte +
     (estado.ordenar ? ` · ordenado por <b>${estado.ordenar}</b> ${estado.crescente ? "↑" : "↓"}` : "");
   desenharTabela(dados.registros);
 }
@@ -365,8 +613,8 @@ function desenharTabela(registros) {
         : `https://investidor10.com.br/fiis/${valor.toUpperCase()}/`;
       return `<td class="papel texto"><a href="${url}" target="_blank" rel="noopener">${valor}</a></td>`;
     }
-    if (c.chave === "setor" && valor) {
-      return `<td class="setor texto"><a href="#" data-setor="${String(valor).replace(/"/g, "&quot;")}">${texto}</a></td>`;
+    if ((c.chave === "setor" || c.chave === "subsetor") && valor) {
+      return `<td class="setor texto"><a href="#" data-setor="${String(valor).replace(/"/g, "&quot;")}" data-campo="${c.chave}">${texto}</a></td>`;
     }
     if (c.formato === "percentual" && valor === 0) {
       return `<td class="incerto" title="Dado provavelmente ausente no Fundamentus (0%)">-</td>`;
@@ -388,17 +636,47 @@ function trocarTipo(tipo, carregarAgora = true) {
   estado.ordenar = tipo === "acoes" ? "dy" : "dy";
   estado.crescente = false;
   estado.setor = "";
+  estado.subsetor = "";
+  estado.tipoFundo = "";
   document.querySelectorAll(".abas button").forEach((b) =>
     b.classList.toggle("ativa", b.dataset.tipo === tipo));
   $("preset").value = "";
+  $("modos").hidden = tipo !== "fiis";
+  trocarModo("triagem");
   montarPresets();
   montarSetores();
   montarFiltros();
   if (carregarAgora) carregar();
 }
 
+function trocarModo(modo) {
+  estado.modo = modo;
+  document.querySelectorAll(".modos button").forEach((b) =>
+    b.classList.toggle("ativa", b.dataset.modo === modo));
+  document.querySelectorAll(".modo-triagem").forEach((el) => { el.hidden = modo !== "triagem"; });
+  document.querySelectorAll(".modo-comparar").forEach((el) => { el.hidden = modo !== "comparar"; });
+  if (modo === "triagem") {
+    montarSetores();
+    $("caixa-spread").hidden = !estado.preset || estado.config.presets[estado.preset]?.taxa_base == null;
+  } else {
+    montarChipsComparar();
+    atualizarContadorComparar();
+    carregarComparar();
+  }
+}
+
 document.querySelectorAll(".abas button").forEach((botao) =>
-  botao.addEventListener("click", () => trocarTipo(botao.dataset.tipo)));
+  botao.addEventListener("click", () => {
+    trocarTipo(botao.dataset.tipo);
+    if (botao.dataset.tipo !== "fiis") history.replaceState(null, "", location.pathname);
+  }));
+
+document.querySelectorAll(".modos button").forEach((botao) =>
+  botao.addEventListener("click", () => {
+    trocarModo(botao.dataset.modo);
+    if (botao.dataset.modo === "comparar") atualizarUrlComparar();
+    else history.replaceState(null, "", location.pathname);
+  }));
 
 $("preset").addEventListener("change", (e) => {
   preencherFiltrosDoPreset(e.target.value);
@@ -406,17 +684,23 @@ $("preset").addEventListener("change", (e) => {
   carregar();
 });
 
-$("setor").addEventListener("change", (e) => {
-  estado.setor = e.target.value;
-  carregar();
+$("filtro-completo").addEventListener("click", () => {
+  estado.completo = !estado.completo;
+  montarSetores();
 });
 
 $("corpo").addEventListener("click", (e) => {
   const link = e.target.closest("a[data-setor]");
   if (!link) return;
   e.preventDefault();
-  estado.setor = link.dataset.setor;
-  $("setor").value = estado.setor;
+  const nome = link.dataset.setor;
+  const campo = link.dataset.campo || "setor";
+  const principais = estado.config.setores_principais || [];
+  estado.subsetor = "";
+  estado.setor = "";
+  if (campo === "subsetor" && !principais.includes(nome)) estado.subsetor = nome;
+  else estado.setor = nome;
+  montarSetores();
   carregar();
 });
 
@@ -507,8 +791,10 @@ $("limpar").addEventListener("click", () => {
   $("caixa-spread").hidden = true;
   $("salvar").disabled = true;
   $("preset").value = "";
-  $("setor").value = "";
   estado.setor = "";
+  estado.subsetor = "";
+  estado.tipoFundo = "";
+  montarSetores();
   montarFiltros();
   carregar();
 });
@@ -530,6 +816,268 @@ $("sync").addEventListener("click", async (e) => {
     botao.disabled = false;
     botao.textContent = "Atualizar do Fundamentus";
   }
+});
+
+// --- Modo Comparar (só FIIs): busca com sugestões, chips, tabela com destaques e ranking fii-aula ---
+
+function atualizarUrlComparar() {
+  const p = new URLSearchParams();
+  p.set("modo", "comparar");
+  p.set("tipo", "fiis");
+  for (const papel of estadoComparar.papeis) p.append("papel", papel);
+  history.replaceState(null, "", "?" + p.toString());
+}
+
+function parametrosComparar() {
+  const p = new URLSearchParams();
+  for (const papel of estadoComparar.papeis) p.append("papel", papel);
+  if (estadoComparar.zeros) p.set("zeros", "1");
+  if (estadoComparar.ranquear) {
+    p.set("ranquear", "1");
+    p.set("taxa_base", $("comparar-taxa-base").value);
+    p.set("spread", $("comparar-spread").value);
+  }
+  return p;
+}
+
+async function carregarComparar() {
+  if (!estadoComparar.papeis.length) {
+    estadoComparar.registros = [];
+    estadoComparar.colunasDestaque = {};
+    estadoComparar.aprovados = null;
+    estadoComparar.ranqueadoResultado = false;
+    estadoComparar.naoEncontrados = [];
+    $("comparar-descricao").textContent = "";
+    desenharTabelaComparar();
+    return;
+  }
+  let dados;
+  try {
+    dados = await (await fetch(`/api/fiis/comparar?` + parametrosComparar())).json();
+  } catch (erro) {
+    $("comparar-corpo").innerHTML =
+      `<tr><td class="erro" colspan="20">Perdi a conexão com o servidor local.</td></tr>`;
+    return;
+  }
+  if (dados.erro) {
+    $("comparar-corpo").innerHTML = `<tr><td class="erro" colspan="20">${dados.erro}</td></tr>`;
+    return;
+  }
+  estadoComparar.registros = dados.registros;
+  estadoComparar.colunasDestaque = dados.colunas_destaque || {};
+  estadoComparar.ranqueadoResultado = Boolean(dados.ranqueado);
+  estadoComparar.aprovados = dados.aprovados_fii_aula;
+  estadoComparar.naoEncontrados = dados.nao_encontrados || [];
+  $("comparar-descricao").textContent = estadoComparar.naoEncontrados.length
+    ? `Não encontrado(s) no banco: ${estadoComparar.naoEncontrados.join(", ")}`
+    : "";
+  desenharTabelaComparar();
+}
+
+function desenharTabelaComparar() {
+  const base = estado.config.colunas.fiis;
+  const colunas = estadoComparar.ranqueadoResultado ? base.concat(estado.config.colunas_rank) : base;
+  const mostrarPassa = estadoComparar.ranqueadoResultado && estadoComparar.aprovados;
+
+  $("comparar-cabecalho").innerHTML = "<tr>" + colunas.map((c) =>
+    `<th data-chave="${c.chave}" class="${estadoComparar.ordenar === c.chave ? "ordenada" : ""} ${c.formato === "texto" ? "texto" : ""}">${c.titulo}${
+      c.descricao ? `<span class="ajuda" title="${c.descricao.replace(/"/g, "&quot;")}">?</span>` : ""}${
+      estadoComparar.ordenar === c.chave ? (estadoComparar.crescente ? " ↑" : " ↓") : ""}</th>`
+  ).join("") + (mostrarPassa ? `<th>Passa fii-aula</th>` : "") + "</tr>";
+
+  $("comparar-cabecalho").querySelectorAll(".ajuda").forEach((icone) =>
+    icone.addEventListener("click", (e) => e.stopPropagation()));
+
+  $("comparar-cabecalho").querySelectorAll("th[data-chave]").forEach((th) => {
+    th.addEventListener("click", () => {
+      const chave = th.dataset.chave;
+      if (estadoComparar.ordenar === chave) estadoComparar.crescente = !estadoComparar.crescente;
+      else { estadoComparar.ordenar = chave; estadoComparar.crescente = false; }
+      desenharTabelaComparar();
+    });
+  });
+
+  let registros = estadoComparar.registros;
+  if (estadoComparar.ordenar) {
+    const chave = estadoComparar.ordenar;
+    const crescente = estadoComparar.crescente;
+    registros = [...registros].sort((a, b) => {
+      const va = a[chave], vb = b[chave];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (va < vb) return crescente ? -1 : 1;
+      if (va > vb) return crescente ? 1 : -1;
+      return 0;
+    });
+  }
+  const colspan = colunas.length + (mostrarPassa ? 1 : 0);
+  if (!registros.length) {
+    const msg = estadoComparar.papeis.length
+      ? "nenhum dos selecionados foi encontrado no banco."
+      : "busque um ticker acima para começar a comparar.";
+    $("comparar-corpo").innerHTML = `<tr><td class="vazio" colspan="${colspan}">${msg}</td></tr>`;
+    return;
+  }
+
+  $("comparar-corpo").innerHTML = registros.map((r) => "<tr>" + colunas.map((c) => {
+    const valor = r[c.chave];
+    const texto = fmt[c.formato](valor);
+    if (c.chave === "papel") {
+      return `<td class="papel texto"><a href="https://investidor10.com.br/fiis/${
+        valor.toUpperCase()}/" target="_blank" rel="noopener">${valor}</a></td>`;
+    }
+    if (c.formato === "percentual" && valor === 0) {
+      return `<td class="incerto" title="Dado provavelmente ausente no Fundamentus (0%)">-</td>`;
+    }
+    let classe = c.formato === "texto" ? "texto" : "";
+    const destaque = estadoComparar.colunasDestaque[c.chave];
+    if (destaque) {
+      if (destaque.melhor.includes(r.papel)) classe += " melhor";
+      else if (destaque.pior.includes(r.papel)) classe += " pior";
+    }
+    return `<td class="${classe}">${texto}</td>`;
+  }).join("") + (mostrarPassa
+    ? `<td class="passa">${estadoComparar.aprovados[r.papel]
+        ? '<span class="badge-passa">✓ passa</span>'
+        : '<span class="badge-nao-passa">✗ não passa</span>'}</td>`
+    : "") + "</tr>").join("");
+}
+
+function montarChipsComparar() {
+  $("comparar-chips").innerHTML = estadoComparar.papeis.map((p) =>
+    `<span class="chip">${p}<button type="button" data-remover="${p}" aria-label="Remover ${p}">×</button></span>`
+  ).join("");
+  $("comparar-chips").querySelectorAll("button[data-remover]").forEach((botao) => {
+    botao.addEventListener("click", () => {
+      estadoComparar.papeis = estadoComparar.papeis.filter((p) => p !== botao.dataset.remover);
+      montarChipsComparar();
+      atualizarContadorComparar();
+      atualizarUrlComparar();
+      carregarComparar();
+    });
+  });
+}
+
+function atualizarContadorComparar() {
+  $("comparar-contador").textContent = `${estadoComparar.papeis.length} de 10 selecionados`;
+}
+
+function selecionarComparar(papel) {
+  if (estadoComparar.papeis.length >= 10) { alert("Máximo de 10 fundos na comparação."); return; }
+  if (!estadoComparar.papeis.includes(papel)) estadoComparar.papeis.push(papel);
+  $("comparar-busca").value = "";
+  $("comparar-sugestoes").hidden = true;
+  estadoComparar.sugestaoIndex = -1;
+  montarChipsComparar();
+  atualizarContadorComparar();
+  atualizarUrlComparar();
+  carregarComparar();
+}
+
+function marcarSugestao(indice) {
+  const itens = [...$("comparar-sugestoes").querySelectorAll("div[data-papel]")];
+  itens.forEach((el, i) => el.classList.toggle("marcada", i === indice));
+  if (indice >= 0 && itens[indice]) itens[indice].scrollIntoView({ block: "nearest" });
+}
+
+async function buscarSugestoesComparar(termo) {
+  const p = new URLSearchParams({ q: termo });
+  for (const papel of estadoComparar.papeis) p.append("exc", papel);
+  let dados;
+  try {
+    dados = await (await fetch(`/api/fiis/sugerir?` + p)).json();
+  } catch (erro) {
+    return;
+  }
+  const sugestoes = dados.sugestoes || [];
+  const caixa = $("comparar-sugestoes");
+  estadoComparar.sugestaoIndex = -1;
+  if (!sugestoes.length) {
+    caixa.innerHTML = `<div>nenhum ticker encontrado</div>`;
+    caixa.hidden = false;
+    return;
+  }
+  caixa.innerHTML = sugestoes.map((s) =>
+    `<div data-papel="${s.papel}">${s.papel}<span class="segmento">${s.segmento ?? ""}</span></div>`
+  ).join("");
+  caixa.hidden = false;
+  caixa.querySelectorAll("div[data-papel]").forEach((item) => {
+    item.addEventListener("click", () => selecionarComparar(item.dataset.papel));
+  });
+}
+
+let comparaTimer = null;
+$("comparar-busca").addEventListener("input", (e) => {
+  clearTimeout(comparaTimer);
+  const termo = e.target.value.trim();
+  if (!termo) { $("comparar-sugestoes").hidden = true; estadoComparar.sugestaoIndex = -1; return; }
+  comparaTimer = setTimeout(() => buscarSugestoesComparar(termo), 150);
+});
+
+$("comparar-busca").addEventListener("keydown", (e) => {
+  const caixa = $("comparar-sugestoes");
+  if (caixa.hidden) return;
+  const itens = [...caixa.querySelectorAll("div[data-papel]")];
+  if (!itens.length) return;
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    estadoComparar.sugestaoIndex = (estadoComparar.sugestaoIndex + 1) % itens.length;
+    marcarSugestao(estadoComparar.sugestaoIndex);
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    estadoComparar.sugestaoIndex = (estadoComparar.sugestaoIndex - 1 + itens.length) % itens.length;
+    marcarSugestao(estadoComparar.sugestaoIndex);
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    const alvo = estadoComparar.sugestaoIndex >= 0 ? itens[estadoComparar.sugestaoIndex] : itens[0];
+    if (alvo) selecionarComparar(alvo.dataset.papel);
+  } else if (e.key === "Escape") {
+    caixa.hidden = true;
+  }
+});
+
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".comparar-busca")) $("comparar-sugestoes").hidden = true;
+});
+
+$("comparar-ranquear").addEventListener("change", (e) => {
+  estadoComparar.ranquear = e.target.checked;
+  $("comparar-caixa-spread").hidden = !estadoComparar.ranquear;
+  carregarComparar();
+});
+
+["comparar-taxa-base", "comparar-spread"].forEach((id) =>
+  $(id).addEventListener("change", () => { if (estadoComparar.ranquear) carregarComparar(); }));
+
+$("comparar-zeros").addEventListener("change", (e) => {
+  estadoComparar.zeros = e.target.checked;
+  carregarComparar();
+});
+
+$("comparar-limpar").addEventListener("click", () => {
+  estadoComparar.papeis = [];
+  montarChipsComparar();
+  atualizarContadorComparar();
+  atualizarUrlComparar();
+  carregarComparar();
+});
+
+$("comparar-csv").addEventListener("click", () => {
+  const registros = estadoComparar.registros || [];
+  if (!registros.length) return alert("Nada para exportar.");
+  const campos = [...new Set(registros.flatMap((r) => Object.keys(r)))]
+    .filter((c) => c !== "tipo" && c !== "atualizado_em");
+  const escapar = (v) => {
+    const texto = v == null ? "" : String(v);
+    return /[",;\n]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
+  };
+  const linhas = [campos.join(","), ...registros.map((r) => campos.map((c) => escapar(r[c])).join(","))];
+  const nome = "comparar-fiis-" + new Date().toISOString().slice(0, 10) + ".csv";
+  const blob = new Blob(["\uFEFF" + linhas.join("\n")], { type: "text/csv;charset=utf-8" });
+  const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: nome });
+  link.click();
+  URL.revokeObjectURL(link.href);
 });
 
 iniciar();

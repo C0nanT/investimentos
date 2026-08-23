@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import db, filtros, fundamentus
+from . import comparador, db, filtros, fundamentus, triagem
 
 PAGINA = Path(__file__).resolve().parent / "painel.html"
 
@@ -126,12 +126,20 @@ class Manipulador(BaseHTTPRequestHandler):
                     "spread": aula.get("spread", filtros.SPREAD_PADRAO),
                     "percentuais": sorted(fundamentus.COLUNAS_PERCENTUAIS),
                     "setores": db.valores_distintos("acoes", "setor"),
+                    "setores_principais": filtros.SETORES_PRINCIPAIS,
+                    "tipos_principais_fii": filtros.TIPOS_PRINCIPAIS_FII,
                     "status": db.status(),
                 })
             if rota.path in ("/api/acoes", "/api/fiis"):
                 return self._enviar_json(self._consultar(rota.path.rsplit("/", 1)[1], parametros))
+            if rota.path == "/api/fiis/sugerir":
+                return self._enviar_json(self._sugerir_fiis(parametros))
+            if rota.path == "/api/fiis/comparar":
+                return self._enviar_json(self._comparar_fiis(parametros))
             if rota.path == "/api/sync":
                 return self._enviar_json(self._sincronizar())
+        except ValueError as erro:
+            return self._enviar_json({"erro": str(erro)}, codigo=400)
         except Exception as erro:  # devolve o erro na tela em vez de derrubar o server
             return self._enviar_json({"erro": f"{type(erro).__name__}: {erro}"}, codigo=500)
 
@@ -185,49 +193,57 @@ class Manipulador(BaseHTTPRequestHandler):
                 criterios.append(filtros.parse_criterio(expressao))
 
         preset = (parametros.get("preset") or [""])[0]
-        ordenar_por = (parametros.get("ordenar") or [""])[0] or None
-        crescente = (parametros.get("crescente") or ["0"])[0] == "1"
-        zeros = (parametros.get("zeros") or ["0"])[0] == "1"
-        setor = (parametros.get("setor") or [""])[0]
-        ranquear_por = None
-        descricao = None
+        taxa_base = (parametros.get("taxa_base") or [None])[0]
+        spread = (parametros.get("spread") or [None])[0]
 
-        if preset:
-            config = db.obter_preset(preset)
-            if config:
-                if config.get("taxa_base") is not None:
-                    config = filtros.aplicar_taxa(
-                        config,
-                        float((parametros.get("taxa_base") or [config["taxa_base"]])[0]),
-                        float((parametros.get("spread") or [config.get("spread") or 0])[0]),
-                    )
-                criterios = list(config["criterios"]) + criterios
-                ordenar_por = ordenar_por or config["ordenar_por"]
-                ranquear_por = config.get("ranquear")
-                descricao = config["descricao"]
-                if ordenar_por == "nota":
-                    crescente = True
-
-        # Com ranking, o Mongo devolve tudo e a ordenacao acontece depois de
-        # calcular a nota (que so existe dentro do recorte filtrado).
-        documentos = db.consultar(
-            tipo, criterios,
-            None if ranquear_por else ordenar_por,
-            crescente, zeros_valem=zeros,
-            iguais={"setor": setor} if setor else None,
+        pedido = triagem.Pedido(
+            tipo=tipo,
+            preset=preset or None,
+            criterios=criterios,
+            ordenar_por=(parametros.get("ordenar") or [""])[0] or None,
+            crescente=(parametros.get("crescente") or ["0"])[0] == "1",
+            zeros_valem=(parametros.get("zeros") or ["0"])[0] == "1",
+            setor=(parametros.get("setor") or [""])[0] or None,
+            subsetor=(parametros.get("subsetor") or [""])[0] or None,
+            tipo_fundo=(parametros.get("tipo_fundo") or [""])[0] or None,
+            taxa_base=float(taxa_base) if taxa_base is not None else None,
+            spread=float(spread) if spread is not None else None,
         )
-        if ranquear_por:
-            documentos = filtros.ranquear(documentos, ranquear_por)
-            documentos = filtros.ordenar(documentos, ordenar_por or "nota", crescente)
+        resultado = triagem.triar(pedido)
 
         return {
-            "tipo": tipo,
-            "total": db.banco()[tipo].count_documents({}),
-            "encontrados": len(documentos),
-            "criterios": criterios,
-            "descricao": descricao,
-            "ranqueado": bool(ranquear_por),
-            "registros": db.serializavel(documentos),
+            "tipo": resultado.tipo,
+            "total": resultado.total,
+            "encontrados": resultado.encontrados,
+            "criterios": resultado.criterios,
+            "descricao": resultado.descricao,
+            "ranqueado": resultado.ranqueado,
+            "registros": resultado.registros,
+        }
+
+    def _sugerir_fiis(self, parametros: dict) -> dict:
+        termo = (parametros.get("q") or [""])[0]
+        excluidos = set(parametros.get("exc") or [])
+        sugestoes = comparador.sugerir(termo, ja_selecionados=excluidos)
+        return {"sugestoes": [{"papel": s.papel, "segmento": s.segmento} for s in sugestoes]}
+
+    def _comparar_fiis(self, parametros: dict) -> dict:
+        taxa_base = (parametros.get("taxa_base") or [None])[0]
+        spread = (parametros.get("spread") or [None])[0]
+        pedido = comparador.PedidoComparacao(
+            papeis=parametros.get("papel") or [],
+            zeros_valem=(parametros.get("zeros") or ["0"])[0] == "1",
+            ranquear=(parametros.get("ranquear") or ["0"])[0] == "1",
+            taxa_base=float(taxa_base) if taxa_base is not None else None,
+            spread=float(spread) if spread is not None else None,
+        )
+        resultado = comparador.comparar(pedido)
+        return {
+            "registros": resultado.registros,
+            "nao_encontrados": resultado.nao_encontrados,
+            "colunas_destaque": resultado.colunas_destaque,
+            "ranqueado": resultado.ranqueado,
+            "aprovados_fii_aula": resultado.aprovados_fii_aula,
         }
 
     def _sincronizar(self) -> dict:

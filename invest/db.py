@@ -199,7 +199,7 @@ def consultar(
     crescente: bool = False,
     limite: int = 0,
     zeros_valem: bool = False,
-    iguais: dict[str, str] | None = None,
+    iguais: dict[str, str | list[str]] | None = None,
 ) -> list[dict]:
     """Traduz os criterios (campo, minimo, maximo) para um filtro do Mongo.
 
@@ -208,7 +208,7 @@ def consultar(
     vacancia nem cap rate), e deixa-lo passar polui a triagem. Com
     zeros_valem=True o zero conta como numero de verdade.
 
-    `iguais` filtra igualdade exata (setor, segmento).
+    `iguais` filtra igualdade (setor, subsetor). Lista vira $in (grupo B3).
     """
     consulta: dict = {}
     for campo, minimo, maximo in criterios or []:
@@ -222,8 +222,9 @@ def consultar(
         if not zeros_valem:
             faixa["$ne"] = 0
     for campo, valor in (iguais or {}).items():
-        if valor:
-            consulta[campo] = valor
+        if not valor:
+            continue
+        consulta[campo] = {"$in": list(valor)} if isinstance(valor, (list, tuple)) else valor
 
     cursor = banco()[tipo].find(consulta, {"_id": 0})
     if ordenar_por:
@@ -255,6 +256,45 @@ def status() -> dict:
         if recente_emp else None,
     }
     return info
+
+
+def contar(tipo: str) -> int:
+    return banco()[tipo].count_documents({})
+
+
+def buscar_fiis_por_prefixo(
+    termo: str, excluir: list[str] | None = None, limite: int = 8,
+) -> list[dict]:
+    """Busca FIIs cujo papel comeca com `termo`, ignorando maiusculas/minusculas.
+
+    Tickers em `excluir` nao voltam no resultado (ja escolhidos na comparacao).
+    Termo vazio nao busca nada — evita listar o mercado inteiro por engano.
+    """
+    termo = (termo or "").strip().upper()
+    if not termo:
+        return []
+    excluidos = {p.upper() for p in (excluir or [])}
+    candidatos = [
+        doc for doc in banco()["fiis"].find({}, {"_id": 0})
+        if doc.get("papel", "").upper().startswith(termo)
+        and doc.get("papel", "").upper() not in excluidos
+    ]
+    candidatos.sort(key=lambda d: d.get("papel", ""))
+    return candidatos[:limite] if limite else candidatos
+
+
+def obter_por_papeis(tipo: str, papeis: list[str]) -> list[dict]:
+    """Devolve documentos de `tipo` para os `papeis` pedidos, na ordem recebida.
+
+    Papeis inexistentes ficam de fora; quem chamar pode comparar `papeis`
+    com os `papel` devolvidos para saber quais nao foram encontrados.
+    """
+    normalizados = [p.upper() for p in papeis]
+    encontrados = {
+        doc["papel"].upper(): doc
+        for doc in banco()[tipo].find({"papel": {"$in": normalizados}}, {"_id": 0})
+    }
+    return [encontrados[p] for p in normalizados if p in encontrados]
 
 
 def valores_distintos(tipo: str, campo: str) -> list[str]:

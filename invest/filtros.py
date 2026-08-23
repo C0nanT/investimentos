@@ -9,6 +9,174 @@ from typing import Iterable
 TAXA_BASE_PADRAO = 8.17
 SPREAD_PADRAO = 1.0
 
+# Painel de ações: principais da B3 (nível 1) misturados com segmentos
+# populares. Fundamentus.setor ≈ subsetor B3; grupos abaixo expandem.
+# Ordem = preenchimento vertical em 3 colunas.
+SETORES_PRINCIPAIS = [
+    "Todos os setores",
+    "Água e Saneamento",
+    "Bancos",
+    "Bens Industriais",
+    "Construção Civil",
+    "Consumo Cíclico",
+    "Consumo Não Cíclico",
+    "Energia Elétrica",
+    "Financeiro",
+    "Materiais Básicos",
+    "Mineração",
+    "Petróleo, Gás e Biocombustíveis",
+    "Previdência e Seguros",
+    "Saúde",
+    "Seguradoras",
+    "Tecnologia da Informação",
+    "Telecomunicações",
+    "Utilidade Pública",
+]
+
+SEGMENTOS_PRINCIPAIS = {
+    "Bancos": "Bancos",
+    "Seguradoras": "Seguradoras",
+}
+
+# Setor econômico B3 -> setores do Fundamentus que entram no recorte.
+GRUPOS_SETORIAIS = {
+    "Bens Industriais": [
+        "Equipamentos",
+        "Máquinas e Equipamentos",
+        "Material de Transporte",
+        "Construção e Engenharia",
+        "Transporte",
+        "Serviços Diversos",
+    ],
+    "Consumo Cíclico": [
+        "Construção Civil",
+        "Tecidos, Vestuário e Calçados",
+        "Utilidades Domésticas",
+        "Automóveis e Motocicletas",
+        "Hoteis e Restaurantes",
+        "Viagens e Lazer",
+        "Diversos",
+        "Comércio",
+    ],
+    "Consumo Não Cíclico": [
+        "Agropecuária",
+        "Alimentos Processados",
+        "Bebidas",
+        "Produtos de Uso Pessoal e de Limpeza",
+        "Comércio e Distribuição",
+    ],
+    "Financeiro": [
+        "Intermediários Financeiros",
+        "Serviços Financeiros Diversos",
+        "Previdência e Seguros",
+        "Exploração de Imóveis",
+        "Holdings Diversificadas",
+    ],
+    "Materiais Básicos": [
+        "Mineração",
+        "Siderurgia e Metalurgia",
+        "Químicos",
+        "Madeira e Papel",
+        "Embalagens",
+        "Materiais Diversos",
+    ],
+    "Saúde": [
+        "Medicamentos e Outros Produtos",
+        "Serv.Méd.Hospit. Análises e Diagnósticos",
+    ],
+    "Tecnologia da Informação": [
+        "Computadores e Equipamentos",
+        "Programas e Serviços",
+    ],
+    "Utilidade Pública": [
+        "Energia Elétrica",
+        "Água e Saneamento",
+        "Gás",
+    ],
+}
+
+# Painel de FIIs: tipos regulatórios (ANBIMA/B3), no mesmo layout de 3 colunas
+# do Investidor10. Fundamentus não traz o rótulo pronto — classificar_tipo_fii()
+# infere a partir de segmento e indicadores físicos.
+TIPOS_PRINCIPAIS_FII = [
+    "Todos os Tipos",
+    "Fundo Misto",
+    "Fundo de Desenvolvimento",
+    "Fundo de Fundos",
+    "Fundo de Papel",
+    "Fundo de Tijolo",
+    "Outro",
+]
+
+SEGMENTOS_TIJOLO = {
+    "Escritórios",
+    "Hospital",
+    "Hotel",
+    "Lajes Corporativas",
+    "Logística",
+    "Residencial",
+    "Shoppings",
+    "Varejo",
+}
+
+
+def classificar_tipo_fii(registro: dict) -> str:
+    """Infere o tipo do FII a partir do snapshot do Fundamentus."""
+    segmento = (registro.get("segmento") or "").strip()
+    papel = (registro.get("papel") or "").upper()
+    imoveis = registro.get("qtd_imoveis") or 0
+    cap_rate = registro.get("cap_rate") or 0
+    vacancia = registro.get("vacancia_media") or 0
+    pvp = registro.get("pvp") or 0
+
+    if papel.endswith("OF11") or "FOF" in papel:
+        return "Fundo de Fundos"
+    if segmento == "Títulos e Val. Mob.":
+        return "Fundo de Papel"
+    if segmento == "Híbrido":
+        return "Fundo Misto"
+    if segmento in SEGMENTOS_TIJOLO:
+        return "Fundo de Tijolo" if imoveis > 0 else "Fundo de Papel"
+    if segmento == "Outros":
+        return "Outro"
+    if segmento == "Multicategoria":
+        if imoveis == 0 and cap_rate == 0 and vacancia == 0:
+            return "Fundo de Papel"
+        if imoveis > 0 and 0 < pvp < 0.55:
+            return "Fundo de Desenvolvimento"
+        if imoveis > 0 and cap_rate > 0 and vacancia > 0:
+            return "Fundo Misto"
+        if imoveis > 0:
+            return "Fundo de Tijolo"
+        return "Fundo de Papel"
+    if not segmento:
+        return "Outro"
+    return "Outro"
+
+
+def iguais_tipo_fii(nome: str) -> str | None:
+    """Traduz o rótulo do painel para o tipo inferido. Vazio = mercado inteiro."""
+    nome = (nome or "").strip()
+    if not nome or nome == "Todos os Tipos":
+        return None
+    return nome
+
+
+def iguais_setorial(nome: str) -> dict[str, str | list[str]] | None:
+    """Traduz o rótulo do painel para o filtro Mongo (setor, subsetor ou $in).
+
+    Vazio / "Todos os setores" = mercado inteiro. Nome fora da lista principal
+    cai em igualdade exata de setor (filtro completo e clique na tabela).
+    """
+    nome = (nome or "").strip()
+    if not nome or nome == "Todos os setores":
+        return None
+    if nome in SEGMENTOS_PRINCIPAIS:
+        return {"subsetor": SEGMENTOS_PRINCIPAIS[nome]}
+    if nome in GRUPOS_SETORIAIS:
+        return {"setor": list(GRUPOS_SETORIAIS[nome])}
+    return {"setor": nome}
+
 
 def preset_fii_aula(taxa_base: float = TAXA_BASE_PADRAO, spread: float = SPREAD_PADRAO) -> dict:
     """Triagem quantitativa de FIIs descrita em notes/aula-live-geracao-dividendos.md.
