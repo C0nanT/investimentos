@@ -101,6 +101,62 @@ class ZerosValemTest(unittest.TestCase):
         self.assertEqual(papeis, {"ZERO3", "CHEIA3"})
 
 
+FIIS_AULA = [
+    {"papel": "HGLG11", "dy": 9.0, "pvp": 1.0, "liquidez": 3_000_000},
+    {"papel": "MXRF11", "dy": 12.0, "pvp": 1.05, "liquidez": 500_000},
+]
+
+
+def _banco_fiis():
+    return banco_com_papeis(acoes=[], fiis=FIIS_AULA)
+
+
+class TaxaSpreadTest(unittest.TestCase):
+    def test_override_recalcula_dy_minimo_e_mantem_demais_criterios(self):
+        pedido = triagem.Pedido(tipo="fiis", preset="fii-aula", taxa_base=5.0, spread=1.0)
+        with patch("invest.db.banco", return_value=_banco_fiis()):
+            resultado = triagem.triar(pedido)
+        criterios = {c[0]: c for c in resultado.criterios}
+        self.assertEqual(criterios["dy"], ("dy", 6.0, 18.0))
+        self.assertEqual(criterios["liquidez"], ("liquidez", 2_000_000, None))
+        self.assertEqual(criterios["pvp"], ("pvp", 0.8, 1.2))
+
+    def test_maximo_do_dy_nao_muda_com_o_override(self):
+        pedido = triagem.Pedido(tipo="fiis", preset="fii-aula", taxa_base=12.0, spread=2.0)
+        with patch("invest.db.banco", return_value=_banco_fiis()):
+            resultado = triagem.triar(pedido)
+        criterios = {c[0]: c for c in resultado.criterios}
+        self.assertEqual(criterios["dy"], ("dy", 14.0, 18.0))
+
+    def test_preset_sem_taxa_base_ignora_override(self):
+        pedido = triagem.Pedido(
+            tipo="acoes", preset="qualidade", taxa_base=5.0, spread=1.0,
+        )
+        with patch("invest.db.banco", return_value=_banco()):
+            resultado = triagem.triar(pedido)
+        self.assertEqual(
+            resultado.criterios,
+            list(filtros.PRESETS["qualidade"]["criterios"]),
+        )
+
+    def test_sem_override_usa_taxa_e_spread_do_preset(self):
+        pedido = triagem.Pedido(tipo="fiis", preset="fii-aula")
+        with patch("invest.db.banco", return_value=_banco_fiis()):
+            resultado = triagem.triar(pedido)
+        criterios = {c[0]: c for c in resultado.criterios}
+        dy_minimo_padrao = round(filtros.TAXA_BASE_PADRAO + filtros.SPREAD_PADRAO, 2)
+        self.assertEqual(criterios["dy"], ("dy", dy_minimo_padrao, 18.0))
+        papeis = {r["papel"] for r in resultado.registros}
+        self.assertEqual(papeis, set())
+
+    def test_criterios_no_resultado_refletem_o_dy_minimo_recalculado(self):
+        pedido = triagem.Pedido(tipo="fiis", preset="fii-aula", taxa_base=5.0, spread=1.0)
+        with patch("invest.db.banco", return_value=_banco_fiis()):
+            resultado = triagem.triar(pedido)
+        papeis = {r["papel"] for r in resultado.registros}
+        self.assertEqual(papeis, {"HGLG11"})
+
+
 class TotalEEncontradosTest(unittest.TestCase):
     def test_total_conta_o_snapshot_e_encontrados_o_recorte(self):
         pedido = triagem.Pedido(tipo="acoes", preset="qualidade")

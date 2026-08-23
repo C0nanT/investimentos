@@ -6,11 +6,11 @@
 
 **Blocked by:** 03 (módulo de triagem)
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Teste: taxa base e spread no pedido recalculam o DY mínimo do preset da aula, deixando os demais critérios como estavam
-- [ ] Teste: o máximo do DY não é alterado pelo recálculo
-- [ ] Teste: preset sem taxa base declarada ignora o override
-- [ ] Teste: sem override no pedido, valem a taxa e o spread guardados no preset
-- [ ] Teste: os critérios que voltam no resultado refletem o DY mínimo já recalculado
-- [ ] `make test` verde
+- [x] Teste: taxa base e spread no pedido recalculam o DY mínimo do preset da aula, deixando os demais critérios como estavam
+- [x] Teste: o máximo do DY não é alterado pelo recálculo
+- [x] Teste: preset sem taxa base declarada ignora o override
+- [x] Teste: sem override no pedido, valem a taxa e o spread guardados no preset
+- [x] Teste: os critérios que voltam no resultado refletem o DY mínimo já recalculado
+- [x] `make test` verde
