@@ -108,6 +108,7 @@
     <select id="preset"><option value="">— sem preset —</option></select>
     <select id="setor" hidden><option value="">— todos os setores —</option></select>
     <button class="botao" id="filtrar">Filtrar</button>
+    <button class="botao" id="salvar" disabled>Salvar preset</button>
     <button class="botao" id="limpar">Limpar filtros</button>
     <label class="opcao" title="No Fundamentus, 0 quase sempre é dado ausente. Marque para tratá-lo como número real.">
       <input type="checkbox" id="zeros"> considerar zeros
@@ -168,6 +169,8 @@ async function iniciar() {
   if (estado.config.erro) return falhar(
     "O servidor respondeu com erro: <code>" + estado.config.erro + "</code>. " +
     "Se for de conexão, suba o banco com <code>docker compose up -d</code>.");
+  if (estado.config.taxa_base != null) $("taxa-base").value = estado.config.taxa_base;
+  if (estado.config.spread != null) $("spread").value = estado.config.spread;
   mostrarStatus();
   // Permite abrir direto num preset: /?tipo=fiis&preset=fii-aula
   const url = new URLSearchParams(location.search);
@@ -258,9 +261,19 @@ function montarFiltros() {
 function preencherFiltrosDoPreset(nome) {
   estado.filtros = {};
   estado.preset = nome;
-  $("caixa-spread").hidden = nome !== "fii-aula";
-  if (!nome) { estado.ranqueado = false; $("descricao").textContent = ""; return; }
+  $("salvar").disabled = !nome;
+  if (!nome) {
+    $("caixa-spread").hidden = true;
+    estado.ranqueado = false;
+    $("descricao").textContent = "";
+    return;
+  }
   const preset = estado.config.presets[nome];
+  $("caixa-spread").hidden = preset.taxa_base == null;
+  if (preset.taxa_base != null) {
+    $("taxa-base").value = preset.taxa_base;
+    $("spread").value = preset.spread;
+  }
   // Os limites do preset viram campos preenchidos, para você ver e ajustar.
   for (const [chave, minimo, maximo] of preset.criterios) {
     estado.filtros[chave] = {};
@@ -371,6 +384,7 @@ function trocarTipo(tipo, carregarAgora = true) {
   estado.ranqueado = false;
   $("descricao").textContent = "";
   $("caixa-spread").hidden = true;
+  $("salvar").disabled = true;
   estado.ordenar = tipo === "acoes" ? "dy" : "dy";
   estado.crescente = false;
   estado.setor = "";
@@ -429,9 +443,61 @@ $("csv").addEventListener("click", () => {
 
 $("filtrar").addEventListener("click", () => carregar());
 
+$("salvar").addEventListener("click", async () => {
+  if (!estado.preset) return;
+  const criterios = Object.entries(estado.filtros).map(([chave, faixa]) => [
+    chave, faixa.min ?? null, faixa.max ?? null,
+  ]);
+  const corpo = { nome: estado.preset, criterios };
+  if (!$("caixa-spread").hidden) {
+    corpo.taxa_base = Number($("taxa-base").value);
+    corpo.spread = Number($("spread").value);
+  }
+  const botao = $("salvar");
+  botao.disabled = true;
+  botao.textContent = "salvando…";
+  try {
+    const dados = await (await fetch("/api/presets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(corpo),
+    })).json();
+    if (dados.erro) {
+      alert(dados.erro);
+      return;
+    }
+    estado.config.presets[estado.preset] = dados.preset;
+    if (dados.preset.taxa_base != null) {
+      estado.config.taxa_base = dados.preset.taxa_base;
+      estado.config.spread = dados.preset.spread;
+    }
+    for (const faixa of Object.values(estado.filtros)) delete faixa.editado;
+    montarPresets();
+    $("preset").value = estado.preset;
+    $("descricao").textContent = dados.preset.descricao;
+    botao.textContent = "Salvo";
+    await carregar();
+  } catch (erro) {
+    alert("Não consegui salvar o preset.");
+  } finally {
+    botao.disabled = !estado.preset;
+    setTimeout(() => { botao.textContent = "Salvar preset"; }, 1200);
+  }
+});
+
 $("zeros").addEventListener("change", (e) => { estado.zeros = e.target.checked; carregar(); });
 ["taxa-base", "spread"].forEach((id) =>
-  $(id).addEventListener("change", () => { preencherFiltrosDoPreset(estado.preset); montarFiltros(); carregar(); }));
+  $(id).addEventListener("change", () => {
+    const taxa = Number($("taxa-base").value);
+    const spread = Number($("spread").value);
+    if (!Number.isNaN(taxa) && !Number.isNaN(spread)) {
+      estado.filtros.dy = estado.filtros.dy || {};
+      estado.filtros.dy.min = Math.round((taxa + spread) * 100) / 100;
+      delete estado.filtros.dy.editado;
+    }
+    montarFiltros();
+    carregar();
+  }));
 
 $("limpar").addEventListener("click", () => {
   estado.filtros = {};
@@ -439,6 +505,7 @@ $("limpar").addEventListener("click", () => {
   estado.ranqueado = false;
   $("descricao").textContent = "";
   $("caixa-spread").hidden = true;
+  $("salvar").disabled = true;
   $("preset").value = "";
   $("setor").value = "";
   estado.setor = "";

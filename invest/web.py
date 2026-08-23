@@ -85,6 +85,25 @@ COLUNAS_RANK = [
 ]
 
 
+def _preset_publico(p: dict) -> dict:
+    return {
+        "descricao": p["descricao"],
+        "tipo": p["tipo"],
+        "criterios": p["criterios"],
+        "ordenar_por": p["ordenar_por"],
+        "crescente": p.get("crescente", False),
+        "ranquear": p.get("ranquear"),
+        "taxa_base": p.get("taxa_base"),
+        "spread": p.get("spread"),
+    }
+
+
+def _numero_ou_none(valor) -> float | None:
+    if valor is None or valor == "":
+        return None
+    return float(valor)
+
+
 class Manipulador(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802 (nome exigido pelo BaseHTTPRequestHandler)
         rota = urlparse(self.path)
@@ -94,19 +113,17 @@ class Manipulador(BaseHTTPRequestHandler):
             if rota.path in ("/", "/index.html"):
                 return self._enviar_html(PAGINA.read_text(encoding="utf-8"))
             if rota.path == "/api/config":
+                presets = db.listar_presets()
+                aula = presets.get("fii-aula") or {}
                 return self._enviar_json({
                     "colunas": {t: [{"chave": c, "titulo": r, "formato": f, "descricao": d}
                                      for c, r, f, d in cols]
                                 for t, cols in COLUNAS.items()},
                     "colunas_rank": [{"chave": c, "titulo": r, "formato": f, "descricao": d}
                                       for c, r, f, d in COLUNAS_RANK],
-                    "presets": {n: {"descricao": p["descricao"], "tipo": p["tipo"],
-                                    "criterios": p["criterios"], "ordenar_por": p["ordenar_por"],
-                                    "crescente": p.get("crescente", False),
-                                    "ranquear": p.get("ranquear")}
-                                for n, p in filtros.PRESETS.items()},
-                    "taxa_base": filtros.TAXA_BASE_PADRAO,
-                    "spread": filtros.SPREAD_PADRAO,
+                    "presets": {n: _preset_publico(p) for n, p in presets.items()},
+                    "taxa_base": aula.get("taxa_base", filtros.TAXA_BASE_PADRAO),
+                    "spread": aula.get("spread", filtros.SPREAD_PADRAO),
                     "percentuais": sorted(fundamentus.COLUNAS_PERCENTUAIS),
                     "setores": db.valores_distintos("acoes", "setor"),
                     "status": db.status(),
@@ -119,6 +136,47 @@ class Manipulador(BaseHTTPRequestHandler):
             return self._enviar_json({"erro": f"{type(erro).__name__}: {erro}"}, codigo=500)
 
         self._enviar_json({"erro": "rota nao encontrada"}, codigo=404)
+
+    def do_POST(self):  # noqa: N802
+        rota = urlparse(self.path)
+        try:
+            if rota.path == "/api/presets":
+                return self._salvar_preset()
+        except KeyError as erro:
+            return self._enviar_json({"erro": str(erro)}, codigo=404)
+        except json.JSONDecodeError:
+            return self._enviar_json({"erro": "json invalido"}, codigo=400)
+        except (TypeError, ValueError) as erro:
+            return self._enviar_json({"erro": str(erro)}, codigo=400)
+        except Exception as erro:
+            return self._enviar_json({"erro": f"{type(erro).__name__}: {erro}"}, codigo=500)
+        self._enviar_json({"erro": "rota nao encontrada"}, codigo=404)
+
+    def _ler_json(self) -> dict:
+        tamanho = int(self.headers.get("Content-Length") or 0)
+        bruto = self.rfile.read(tamanho) if tamanho else b"{}"
+        return json.loads(bruto.decode("utf-8"))
+
+    def _salvar_preset(self):
+        corpo = self._ler_json()
+        nome = (corpo.get("nome") or "").strip()
+        if not nome:
+            return self._enviar_json({"erro": "nome obrigatorio"}, codigo=400)
+        criterios_brutos = corpo.get("criterios")
+        if not isinstance(criterios_brutos, list):
+            return self._enviar_json({"erro": "criterios deve ser lista"}, codigo=400)
+        criterios = []
+        for item in criterios_brutos:
+            if not isinstance(item, (list, tuple)) or len(item) != 3:
+                return self._enviar_json({"erro": f"criterio invalido: {item}"}, codigo=400)
+            campo, minimo, maximo = item
+            criterios.append((str(campo), _numero_ou_none(minimo), _numero_ou_none(maximo)))
+        atualizado = db.salvar_preset(
+            nome, criterios,
+            taxa_base=corpo.get("taxa_base"),
+            spread=corpo.get("spread"),
+        )
+        return self._enviar_json({"preset": _preset_publico(atualizado)})
 
     def _consultar(self, tipo: str, parametros: dict) -> dict:
         criterios = []
@@ -134,19 +192,21 @@ class Manipulador(BaseHTTPRequestHandler):
         ranquear_por = None
         descricao = None
 
-        if preset and preset in filtros.PRESETS:
-            config = filtros.PRESETS[preset]
-            if preset == "fii-aula":
-                config = filtros.preset_fii_aula(
-                    float((parametros.get("taxa_base") or [filtros.TAXA_BASE_PADRAO])[0]),
-                    float((parametros.get("spread") or [filtros.SPREAD_PADRAO])[0]),
-                )
-            criterios = list(config["criterios"]) + criterios
-            ordenar_por = ordenar_por or config["ordenar_por"]
-            ranquear_por = config.get("ranquear")
-            descricao = config["descricao"]
-            if ordenar_por == "nota":
-                crescente = True
+        if preset:
+            config = db.obter_preset(preset)
+            if config:
+                if config.get("taxa_base") is not None:
+                    config = filtros.aplicar_taxa(
+                        config,
+                        float((parametros.get("taxa_base") or [config["taxa_base"]])[0]),
+                        float((parametros.get("spread") or [config.get("spread") or 0])[0]),
+                    )
+                criterios = list(config["criterios"]) + criterios
+                ordenar_por = ordenar_por or config["ordenar_por"]
+                ranquear_por = config.get("ranquear")
+                descricao = config["descricao"]
+                if ordenar_por == "nota":
+                    crescente = True
 
         # Com ranking, o Mongo devolve tudo e a ordenacao acontece depois de
         # calcular a nota (que so existe dentro do recorte filtrado).

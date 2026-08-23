@@ -31,7 +31,23 @@ def preset_fii_aula(taxa_base: float = TAXA_BASE_PADRAO, spread: float = SPREAD_
         "ordenar_por": "nota",
         "crescente": True,
         "ranquear": [("dy", False), ("pvp", True)],
+        "taxa_base": taxa_base,
+        "spread": spread,
     }
+
+
+def aplicar_taxa(config: dict, taxa_base: float, spread: float) -> dict:
+    """Recalcula o DY minimo do preset a partir da taxa + spread, sem mexer no resto."""
+    dy_minimo = round(taxa_base + spread, 2)
+    criterios = [
+        (("dy", dy_minimo, maximo) if chave == "dy" else (chave, minimo, maximo))
+        for chave, minimo, maximo in config["criterios"]
+    ]
+    novo = dict(config)
+    novo["criterios"] = criterios
+    novo["taxa_base"] = taxa_base
+    novo["spread"] = spread
+    return novo
 
 # Presets: pontos de partida para nao ter que lembrar de todo criterio.
 # Cada valor eh (chave, minimo, maximo); None = sem limite daquele lado.

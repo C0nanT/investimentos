@@ -6,6 +6,7 @@ Colecoes:
     historico     -> um documento por papel por dia, para acompanhar a evolucao
                      dos indicadores (util para ver se o DY se repete ou foi
                      evento isolado)
+    presets       -> filtros predefinidos do painel (semente no codigo; edicao no banco)
 """
 
 from __future__ import annotations
@@ -14,6 +15,8 @@ import os
 from datetime import datetime, timezone
 
 from pymongo import ASCENDING, MongoClient, UpdateOne
+
+from . import filtros
 
 URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
 NOME_BANCO = os.environ.get("MONGO_DB", "investimentos")
@@ -39,6 +42,90 @@ def garantir_indices() -> None:
     bd.empresas.create_index([("setor", ASCENDING)])
     bd.historico.create_index([("papel", ASCENDING), ("data", ASCENDING)], unique=True)
     bd.historico.create_index([("tipo", ASCENDING), ("data", ASCENDING)])
+    bd.presets.create_index([("tipo", ASCENDING)])
+    garantir_presets()
+
+
+def _documento_de_preset(nome: str, config: dict) -> dict:
+    doc = {
+        "_id": nome,
+        "nome": nome,
+        "descricao": config["descricao"],
+        "tipo": config["tipo"],
+        "criterios": [list(c) for c in config["criterios"]],
+        "ordenar_por": config["ordenar_por"],
+        "crescente": bool(config.get("crescente", False)),
+        "ranquear": [list(p) for p in config["ranquear"]] if config.get("ranquear") else None,
+    }
+    if config.get("taxa_base") is not None:
+        doc["taxa_base"] = config["taxa_base"]
+        doc["spread"] = config["spread"]
+    return doc
+
+
+def _de_documento(doc: dict) -> dict:
+    saida = {
+        "nome": doc.get("nome") or doc.get("_id"),
+        "descricao": doc["descricao"],
+        "tipo": doc["tipo"],
+        "criterios": [tuple(c) for c in doc.get("criterios", [])],
+        "ordenar_por": doc.get("ordenar_por"),
+        "crescente": bool(doc.get("crescente", False)),
+        "ranquear": [tuple(p) for p in doc["ranquear"]] if doc.get("ranquear") else None,
+    }
+    if doc.get("taxa_base") is not None:
+        saida["taxa_base"] = doc["taxa_base"]
+        saida["spread"] = doc.get("spread")
+    return saida
+
+
+def garantir_presets() -> None:
+    """Insere os presets do codigo que ainda nao existem. Nunca sobrescreve edicao salva."""
+    col = banco().presets
+    for nome, config in filtros.PRESETS.items():
+        col.update_one(
+            {"_id": nome},
+            {"$setOnInsert": _documento_de_preset(nome, config)},
+            upsert=True,
+        )
+
+
+def listar_presets() -> dict[str, dict]:
+    garantir_presets()
+    por_nome = {}
+    for doc in banco().presets.find():
+        preset = _de_documento(doc)
+        por_nome[preset["nome"]] = preset
+    saida: dict[str, dict] = {}
+    for nome in filtros.PRESETS:
+        if nome in por_nome:
+            saida[nome] = por_nome.pop(nome)
+    saida.update(por_nome)
+    return saida
+
+
+def obter_preset(nome: str) -> dict | None:
+    garantir_presets()
+    doc = banco().presets.find_one({"_id": nome})
+    return _de_documento(doc) if doc else None
+
+
+def salvar_preset(
+    nome: str,
+    criterios: list[tuple[str, float | None, float | None]],
+    taxa_base: float | None = None,
+    spread: float | None = None,
+) -> dict:
+    """Sobrescreve os criterios (e taxa/spread, se vierem) de um preset ja existente."""
+    if obter_preset(nome) is None:
+        raise KeyError(f"preset desconhecido: {nome}")
+    campos: dict = {"criterios": [list(c) for c in criterios]}
+    if taxa_base is not None:
+        campos["taxa_base"] = float(taxa_base)
+    if spread is not None:
+        campos["spread"] = float(spread)
+    banco().presets.update_one({"_id": nome}, {"$set": campos})
+    return obter_preset(nome)
 
 
 def gravar(tipo: str, registros: list[dict]) -> dict:

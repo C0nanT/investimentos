@@ -121,6 +121,7 @@ MongoDB 7 em container (`docker-compose.yml`), banco `investimentos`:
 | `fiis` | 1 documento por FII |
 | `empresas` | 1 documento por papel: nome comercial, razão social, setor e subsetor (atualiza no máximo a cada 30 dias) |
 | `historico` | 1 documento por papel por dia — permite ver depois se o DY se repete ou foi evento isolado |
+| `presets` | filtros predefinidos do painel (semente do código; edição na página sobrescreve) |
 
 Consultas diretas, se quiser:
 
@@ -138,7 +139,8 @@ Tudo acontece em http://localhost:8000:
 
 - abas **Ações** e **FIIs**;
 - menu de **presets** (os limites do preset aparecem nos campos, prontos para
-  afrouxar ou apertar);
+  afrouxar ou apertar; **Salvar preset** grava esses limites no banco e passa a
+  ser o novo original daquele preset);
 - filtro por **setor** (ações), para comparar um papel com os pares; clicar no
   setor na tabela aplica o mesmo recorte;
 - campos de **mín/máx** para cada indicador;
@@ -185,7 +187,10 @@ dois ficam para a análise individual, no relatório gerencial do fundo.
 | `fii-tijolo-desconto` | FIIs | P/VP ≤ 0,95, cap rate ≥ 6%, com imóveis |
 | `fii-aula` | FIIs | a triagem descrita acima, com rank e nota |
 
-Editar os presets: `invest/filtros.py`.
+Os valores iniciais vêm de `invest/filtros.py` e são gravados na coleção `presets`
+na primeira vez. Depois disso o banco manda: ajuste os mín/máx na página e clique
+**Salvar preset** para sobrescrever aquele preset. Um preset já salvo nunca é
+restaurado pelo código.
 
 ## O que é filtrado (e o que não é)
 
