@@ -2,7 +2,7 @@
 # Uso rápido:  make start   (sobe tudo e abre o painel)
 
 PY      := .venv/bin/python
-PORTA   ?= 8000
+PORTA   ?= 8234
 
 .DEFAULT_GOAL := ajuda
 

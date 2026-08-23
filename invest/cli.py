@@ -27,7 +27,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="força novo download de nome e setor das empresas")
 
     p_web = sub.add_parser("web", help="sobe o painel em localhost")
-    p_web.add_argument("-p", "--porta", type=int, default=8000)
+    p_web.add_argument("-p", "--porta", type=int, default=8234)
     p_web.add_argument("--sem-navegador", action="store_true")
 
     sub.add_parser("status", help="mostra o estado do banco")

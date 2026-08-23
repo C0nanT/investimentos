@@ -40,7 +40,7 @@ serviço. `make` sozinho lista os comandos:
 | `make start` | tudo de uma vez: banco + sync + painel |
 | `make up` | só sobe o MongoDB (espera ele aceitar conexão) |
 | `make sync` | baixa do Fundamentus e grava no banco |
-| `make web` | painel em http://localhost:8000 (`make web PORTA=9000`) |
+| `make web` | painel em http://localhost:8234 (`make web PORTA=9000`) |
 | `make status` | estado do container e do banco |
 | `make mongosh` | shell do MongoDB |
 | `make parar` | para o container (dados preservados) |

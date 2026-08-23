@@ -267,7 +267,7 @@ class Manipulador(BaseHTTPRequestHandler):
         pass
 
 
-def servir(porta: int = 8000, abrir_navegador: bool = True) -> None:
+def servir(porta: int = 8234, abrir_navegador: bool = True) -> None:
     servidor = ThreadingHTTPServer(("127.0.0.1", porta), Manipulador)
     url = f"http://localhost:{porta}"
     print(f"painel em {url}  (ctrl+c para parar)")
