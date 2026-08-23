@@ -82,8 +82,8 @@ Três formas de disparar:
 
 O que acontece em cada sync:
 
-1. **Download** — duas requisições (ações e FIIs) que trazem o mercado inteiro,
-   e o resultado é gravado em `data/*.json`.
+1. **Download** — a tabela de ações, a de FIIs, a listagem de empresas e a ficha
+   de cada papel (nome, setor, subsetor), gravadas em `data/*.json`.
 2. **Upsert nas coleções `acoes`/`fiis`** — um documento por papel, sempre
    sobrescrito com o dado mais recente. A coleção nunca cresce, só se atualiza.
 3. **Carimbo no `historico`** — um documento por papel **por dia**
@@ -92,10 +92,14 @@ O que acontece em cada sync:
    É daí que sai, com o tempo, a resposta para "esse DY se repete ou foi um
    ano fora da curva?".
 
-O cache de 12h em `data/*.json` guarda o último download bruto e serve de
-rede de segurança (`sync --cache` regrava sem internet). O `sync` normal e o
-botão do painel sempre ignoram o cache e buscam dados novos.
-Use `make limpar-cache` para descartá-lo.
+O cache de 12h em `data/{acoes,fiis}.json` guarda o último download bruto e serve de
+rede de segurança (`sync --cache` regrava sem internet). Nome, setor e subsetor das
+empresas ficam em `data/empresas.json` por **30 dias** (a classificação quase não
+muda). Na primeira vez o sync baixa a ficha de cada papel — leva cerca de um ou dois
+minutos. `sync --empresas` força essa atualização.
+O `sync` normal e o botão do painel sempre ignoram o cache de indicadores e buscam
+dados novos; empresas só rebaixam se o cache estiver velho, incompleto ou sem setor.
+Use `make limpar-cache` para descartá-los.
 
 Frequência que faz sentido: o Fundamentus recalcula os múltiplos com o preço
 do fechamento, então **uma vez por dia, depois do pregão, é suficiente** —
@@ -113,8 +117,9 @@ MongoDB 7 em container (`docker-compose.yml`), banco `investimentos`:
 
 | Coleção | Conteúdo |
 |---|---|
-| `acoes` | 1 documento por ação, sempre o dado mais recente (chave única `papel`) |
+| `acoes` | 1 documento por ação, sempre o dado mais recente (chave única `papel`), com nome da empresa e setor |
 | `fiis` | 1 documento por FII |
+| `empresas` | 1 documento por papel: nome comercial, razão social, setor e subsetor (atualiza no máximo a cada 30 dias) |
 | `historico` | 1 documento por papel por dia — permite ver depois se o DY se repete ou foi evento isolado |
 
 Consultas diretas, se quiser:
@@ -134,6 +139,8 @@ Tudo acontece em http://localhost:8000:
 - abas **Ações** e **FIIs**;
 - menu de **presets** (os limites do preset aparecem nos campos, prontos para
   afrouxar ou apertar);
+- filtro por **setor** (ações), para comparar um papel com os pares; clicar no
+  setor na tabela aplica o mesmo recorte;
 - campos de **mín/máx** para cada indicador;
 - **ordenação** clicando no título da coluna;
 - caixa **considerar zeros** (veja abaixo);

@@ -23,6 +23,8 @@ def main(argv: list[str] | None = None) -> int:
     p_sync = sub.add_parser("sync", help="baixa do Fundamentus e grava no MongoDB")
     p_sync.add_argument("--cache", action="store_true",
                         help="usa o cache local em vez de baixar de novo")
+    p_sync.add_argument("--empresas", action="store_true",
+                        help="força novo download de nome e setor das empresas")
 
     p_web = sub.add_parser("web", help="sobe o painel em localhost")
     p_web.add_argument("-p", "--porta", type=int, default=8000)
@@ -35,6 +37,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.comando == "sync":
         for tipo in ("acoes", "fiis"):
             registros, origem = fundamentus.carregar(tipo, forcar=not args.cache)
+            if tipo == "acoes":
+                empresas, origem_emp = fundamentus.carregar_empresas(
+                    [r["papel"] for r in registros],
+                    forcar=args.empresas,
+                )
+                fundamentus.enriquecer(registros, empresas)
+                emp = db.gravar_empresas(empresas)
+                print(f"empresas: {emp['total']} fichas "
+                      f"({emp['com_setor']} com setor, {emp['novos']} novas) — {origem_emp}")
             resumo = db.gravar(tipo, registros)
             print(f"{tipo}: {resumo['total']} papeis gravados "
                   f"({resumo['novos']} novos, {resumo['existentes']} ja conhecidos) — {origem}")
@@ -48,6 +59,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {tipo}: {dados['documentos']} documentos, atualizado em {dados['atualizado_em']}")
         print(f"  historico: {info['historico']['documentos']} documentos "
               f"em {info['historico']['dias']} dia(s)")
+        emp = info["empresas"]
+        print(f"  empresas: {emp['documentos']} fichas, {emp['setores']} setores, "
+              f"atualizado em {emp['atualizado_em']}")
         return 0
 
     if args.comando == "web":

@@ -11,12 +11,25 @@ import json
 import re
 import time
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
 
 URL_ACOES = "https://www.fundamentus.com.br/resultado.php"
 URL_FIIS = "https://www.fundamentus.com.br/fii_resultado.php"
+URL_EMPRESAS = "https://www.fundamentus.com.br/detalhes.php"
+
+# Nome/setor mudam pouco; 30 dias evita martelar o site a cada sync de preço.
+MAX_IDADE_EMPRESAS_DIAS = 30
+WORKERS_FICHA = 4
+CAMPOS_FICHA = {
+    "Papel": "papel",
+    "Tipo": "tipo",
+    "Empresa": "empresa",
+    "Setor": "setor",
+    "Subsetor": "subsetor",
+}
 
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 
@@ -48,6 +61,12 @@ CAMPOS_ACOES = {
     "Cresc. Rec.5a": "cagr_receita_5a",
 }
 
+CAMPOS_EMPRESAS = {
+    "Papel": "papel",
+    "Nome Comercial": "nome_comercial",
+    "Razão Social": "razao_social",
+}
+
 CAMPOS_FIIS = {
     "Papel": "papel",
     "Segmento": "segmento",
@@ -71,7 +90,10 @@ COLUNAS_PERCENTUAIS = {
     "cagr_receita_5a", "ffo_yield", "cap_rate", "vacancia_media",
 }
 
-COLUNAS_TEXTO = {"papel", "segmento", "endereco"}
+COLUNAS_TEXTO = {
+    "papel", "segmento", "endereco",
+    "nome_comercial", "razao_social", "empresa", "setor", "subsetor", "tipo",
+}
 
 
 class _ParserTabela(HTMLParser):
@@ -116,6 +138,41 @@ class _ParserTabela(HTMLParser):
     def handle_data(self, data):
         if self._celula is not None:
             self._celula.append(data)
+
+
+class _ParserFicha(HTMLParser):
+    """Pares rótulo/valor da ficha (td.label + td.data)."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.brutos: dict[str, str] = {}
+        self._tipo: str | None = None
+        self._texto: list[str] = []
+        self._rotulo: str | None = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag != "td":
+            return
+        classes = dict(attrs).get("class", "")
+        if "label" in classes.split():
+            self._tipo, self._texto = "label", []
+        elif "data" in classes.split():
+            self._tipo, self._texto = "data", []
+
+    def handle_endtag(self, tag):
+        if tag != "td" or self._tipo is None:
+            return
+        texto = " ".join("".join(self._texto).split())
+        if self._tipo == "label":
+            self._rotulo = texto.lstrip("? ").strip()
+        elif self._tipo == "data" and self._rotulo:
+            self.brutos[self._rotulo] = texto
+            self._rotulo = None
+        self._tipo = None
+
+    def handle_data(self, data):
+        if self._tipo is not None:
+            self._texto.append(data)
 
 
 def _baixar(url: str) -> str:
@@ -180,6 +237,76 @@ def _montar_registros(html: str, campos: dict[str, str]) -> list[dict]:
     return registros
 
 
+def _extrair_ficha(html: str) -> dict:
+    parser = _ParserFicha()
+    parser.feed(html)
+    return {
+        CAMPOS_FICHA[rotulo]: valor
+        for rotulo, valor in parser.brutos.items()
+        if rotulo in CAMPOS_FICHA and valor
+    }
+
+
+def enriquecer(registros: list[dict], empresas: list[dict]) -> list[dict]:
+    """Copia nome, setor e subsetor para cada papel. Altera in-place."""
+    por_papel = {e["papel"]: e for e in empresas}
+    for registro in registros:
+        info = por_papel.get(registro["papel"])
+        if not info:
+            continue
+        for campo in ("empresa", "razao_social", "setor", "subsetor"):
+            if info.get(campo):
+                registro[campo] = info[campo]
+    return registros
+
+
+def _baixar_ficha(papel: str) -> dict | None:
+    url = f"{URL_EMPRESAS}?papel={papel}"
+    html = _baixar(url)
+    if len(html) < 1000:
+        time.sleep(0.8)
+        html = _baixar(url)
+    if len(html) < 1000:
+        return None
+    campos = _extrair_ficha(html)
+    return campos if campos.get("setor") else None
+
+
+def _baixar_fichas(papeis: list[str]) -> dict[str, dict]:
+    saida: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=WORKERS_FICHA) as pool:
+        futuros = {pool.submit(_baixar_ficha, p): p for p in papeis}
+        feitos = 0
+        for fut in as_completed(futuros):
+            feitos += 1
+            if feitos % 100 == 0 or feitos == len(papeis):
+                print(f"  fichas {feitos}/{len(papeis)}", flush=True)
+            try:
+                info = fut.result()
+            except Exception:
+                info = None
+            if info:
+                saida[futuros[fut]] = info
+    return saida
+
+
+def _montar_empresas(papeis: list[str], listagem: list[dict], fichas: dict[str, dict]) -> list[dict]:
+    nomes = {r["papel"]: r for r in listagem}
+    registros = []
+    for papel in papeis:
+        nom = nomes.get(papel, {})
+        fic = fichas.get(papel, {})
+        registros.append({
+            "papel": papel,
+            "empresa": nom.get("nome_comercial") or fic.get("empresa"),
+            "razao_social": nom.get("razao_social"),
+            "tipo": fic.get("tipo"),
+            "setor": fic.get("setor"),
+            "subsetor": fic.get("subsetor"),
+        })
+    return registros
+
+
 def _caminho_cache(tipo: str) -> Path:
     return DIR_DADOS / f"{tipo}.json"
 
@@ -212,6 +339,57 @@ def carregar(tipo: str, max_idade_horas: float = 12.0, forcar: bool = False) -> 
         json.dumps(
             {
                 "fonte": url,
+                "baixado_em": agora.strftime("%d/%m/%Y %H:%M"),
+                "baixado_em_epoch": time.time(),
+                "registros": registros,
+            },
+            ensure_ascii=False,
+            indent=1,
+        ),
+        encoding="utf-8",
+    )
+    return registros, "download novo"
+
+
+def carregar_empresas(
+    papeis: list[str],
+    max_idade_dias: float = MAX_IDADE_EMPRESAS_DIAS,
+    forcar: bool = False,
+) -> tuple[list[dict], str]:
+    """Nome, razão social, setor e subsetor de cada papel.
+
+    Cache em data/empresas.json por max_idade_dias: classificação setorial
+    quase não muda. O download pede a ficha de cada papel.
+    """
+    cache = _caminho_cache("empresas")
+    if cache.exists() and not forcar:
+        conteudo = json.loads(cache.read_text(encoding="utf-8"))
+        idade = time.time() - conteudo["baixado_em_epoch"]
+        conhecidos = {r["papel"]: r for r in conteudo["registros"]}
+        filtrados = [conhecidos[p] for p in papeis if p in conhecidos]
+        cobertos = sum(1 for r in filtrados if r.get("setor"))
+        if (idade < max_idade_dias * 86400
+                and len(filtrados) == len(papeis)
+                and cobertos >= max(1, len(papeis) // 2)):
+            return filtrados, f"cache de {conteudo['baixado_em']}"
+
+    listagem = _montar_registros(_baixar(URL_EMPRESAS), CAMPOS_EMPRESAS)
+    print(f"  baixando ficha de {len(papeis)} papeis (setor/subsetor)…", flush=True)
+    fichas = _baixar_fichas(papeis)
+    registros = _montar_empresas(papeis, listagem, fichas)
+    com_setor = sum(1 for r in registros if r.get("setor"))
+    if com_setor < max(1, len(registros) // 2):
+        raise RuntimeError(
+            f"so {com_setor}/{len(registros)} empresas com setor "
+            "(layout do site pode ter mudado)"
+        )
+
+    agora = datetime.now(timezone.utc).astimezone()
+    DIR_DADOS.mkdir(exist_ok=True)
+    cache.write_text(
+        json.dumps(
+            {
+                "fonte": URL_EMPRESAS,
                 "baixado_em": agora.strftime("%d/%m/%Y %H:%M"),
                 "baixado_em_epoch": time.time(),
                 "registros": registros,

@@ -2,6 +2,7 @@
 
 Colecoes:
     acoes / fiis  -> um documento por papel, sempre o dado mais recente
+    empresas      -> nome, razao social e setor (muda pouco; separado do snapshot)
     historico     -> um documento por papel por dia, para acompanhar a evolucao
                      dos indicadores (util para ver se o DY se repete ou foi
                      evento isolado)
@@ -33,6 +34,9 @@ def garantir_indices() -> None:
         bd[tipo].create_index([("papel", ASCENDING)], unique=True)
         bd[tipo].create_index([("dy", ASCENDING)])
         bd[tipo].create_index([("pvp", ASCENDING)])
+    bd.acoes.create_index([("setor", ASCENDING)])
+    bd.empresas.create_index([("papel", ASCENDING)], unique=True)
+    bd.empresas.create_index([("setor", ASCENDING)])
     bd.historico.create_index([("papel", ASCENDING), ("data", ASCENDING)], unique=True)
     bd.historico.create_index([("tipo", ASCENDING), ("data", ASCENDING)])
 
@@ -77,6 +81,30 @@ def gravar(tipo: str, registros: list[dict]) -> dict:
     }
 
 
+def gravar_empresas(registros: list[dict]) -> dict:
+    """Upsert da ficha da empresa (nome, razao social, setor). Sem historico."""
+    bd = banco()
+    garantir_indices()
+    agora = datetime.now(timezone.utc)
+    ops = [
+        UpdateOne(
+            {"papel": r["papel"]},
+            {"$set": {**r, "atualizado_em": agora}},
+            upsert=True,
+        )
+        for r in registros
+    ]
+    resultado = bd.empresas.bulk_write(ops, ordered=False)
+    novos = resultado.upserted_count
+    return {
+        "tipo": "empresas",
+        "total": len(registros),
+        "novos": novos,
+        "existentes": len(registros) - novos,
+        "com_setor": sum(1 for r in registros if r.get("setor")),
+    }
+
+
 def consultar(
     tipo: str,
     criterios: list[tuple[str, float | None, float | None]] | None = None,
@@ -84,6 +112,7 @@ def consultar(
     crescente: bool = False,
     limite: int = 0,
     zeros_valem: bool = False,
+    iguais: dict[str, str] | None = None,
 ) -> list[dict]:
     """Traduz os criterios (campo, minimo, maximo) para um filtro do Mongo.
 
@@ -91,6 +120,8 @@ def consultar(
     quase sempre significa dado ausente (bancos sem ROIC, FIIs de papel sem
     vacancia nem cap rate), e deixa-lo passar polui a triagem. Com
     zeros_valem=True o zero conta como numero de verdade.
+
+    `iguais` filtra igualdade exata (setor, segmento).
     """
     consulta: dict = {}
     for campo, minimo, maximo in criterios or []:
@@ -103,6 +134,9 @@ def consultar(
             faixa["$lte"] = maximo
         if not zeros_valem:
             faixa["$ne"] = 0
+    for campo, valor in (iguais or {}).items():
+        if valor:
+            consulta[campo] = valor
 
     cursor = banco()[tipo].find(consulta, {"_id": 0})
     if ordenar_por:
@@ -126,7 +160,18 @@ def status() -> dict:
         "documentos": bd.historico.count_documents({}),
         "dias": len(bd.historico.distinct("data")),
     }
+    recente_emp = bd.empresas.find_one({}, {"atualizado_em": 1}, sort=[("atualizado_em", -1)])
+    info["empresas"] = {
+        "documentos": bd.empresas.count_documents({}),
+        "setores": len([v for v in bd.empresas.distinct("setor") if v]),
+        "atualizado_em": recente_emp["atualizado_em"].astimezone().strftime("%d/%m/%Y %H:%M")
+        if recente_emp else None,
+    }
     return info
+
+
+def valores_distintos(tipo: str, campo: str) -> list[str]:
+    return sorted(v for v in banco()[tipo].distinct(campo) if v)
 
 
 def serializavel(documentos: list[dict]) -> list[dict]:

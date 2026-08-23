@@ -15,6 +15,12 @@ PAGINA = Path(__file__).resolve().parent / "painel.html"
 COLUNAS = {
     "acoes": [
         ("papel", "Papel", "texto", "Código de negociação da ação na bolsa (ticker)."),
+        ("empresa", "Empresa", "texto", "Nome comercial da companhia emissora."),
+        ("setor", "Setor", "texto",
+         "Setor de atuação no Fundamentus. Use para comparar múltiplos com os pares, "
+         "não com o mercado inteiro."),
+        ("subsetor", "Subsetor", "texto",
+         "Segmento dentro do setor (ex.: Bancos dentro de Intermediários Financeiros)."),
         ("cotacao", "Cotação", "reais", "Preço atual de uma ação."),
         ("dy", "DY", "percentual",
          "Dividend Yield: quanto a empresa pagou em dividendos nos últimos 12 meses, "
@@ -102,6 +108,7 @@ class Manipulador(BaseHTTPRequestHandler):
                     "taxa_base": filtros.TAXA_BASE_PADRAO,
                     "spread": filtros.SPREAD_PADRAO,
                     "percentuais": sorted(fundamentus.COLUNAS_PERCENTUAIS),
+                    "setores": db.valores_distintos("acoes", "setor"),
                     "status": db.status(),
                 })
             if rota.path in ("/api/acoes", "/api/fiis"):
@@ -123,6 +130,7 @@ class Manipulador(BaseHTTPRequestHandler):
         ordenar_por = (parametros.get("ordenar") or [""])[0] or None
         crescente = (parametros.get("crescente") or ["0"])[0] == "1"
         zeros = (parametros.get("zeros") or ["0"])[0] == "1"
+        setor = (parametros.get("setor") or [""])[0]
         ranquear_por = None
         descricao = None
 
@@ -146,6 +154,7 @@ class Manipulador(BaseHTTPRequestHandler):
             tipo, criterios,
             None if ranquear_por else ordenar_por,
             crescente, zeros_valem=zeros,
+            iguais={"setor": setor} if setor else None,
         )
         if ranquear_por:
             documentos = filtros.ranquear(documentos, ranquear_por)
@@ -165,10 +174,18 @@ class Manipulador(BaseHTTPRequestHandler):
         relatorio = []
         for tipo in ("acoes", "fiis"):
             registros, origem = fundamentus.carregar(tipo, forcar=True)
+            if tipo == "acoes":
+                empresas, origem_emp = fundamentus.carregar_empresas(
+                    [r["papel"] for r in registros])
+                fundamentus.enriquecer(registros, empresas)
+                emp = db.gravar_empresas(empresas)
+                emp["origem"] = origem_emp
+                relatorio.append(emp)
             resumo = db.gravar(tipo, registros)
             resumo["origem"] = origem
             relatorio.append(resumo)
-        return {"sync": relatorio, "status": db.status()}
+        return {"sync": relatorio, "status": db.status(),
+                "setores": db.valores_distintos("acoes", "setor")}
 
     def _enviar_json(self, dados, codigo: int = 200):
         corpo = json.dumps(dados, ensure_ascii=False, default=str).encode("utf-8")

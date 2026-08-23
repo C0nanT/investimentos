@@ -64,7 +64,7 @@
   .tabela-caixa { overflow-x: auto; border: 1px solid var(--borda); border-radius: 10px; background: var(--painel); }
   table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
   th, td { padding: 7px 11px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--borda); }
-  th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+  th:first-child, td:first-child, th.texto, td.texto { text-align: left; }
   thead th {
     position: sticky; top: 0; background: var(--painel); cursor: pointer;
     font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--suave);
@@ -74,8 +74,8 @@
   thead th.ordenada { color: var(--destaque); }
   tbody tr:nth-child(even) { background: var(--zebra); }
   tbody tr:hover { background: color-mix(in srgb, var(--destaque) 10%, transparent); }
-  td.papel a { color: var(--destaque); font-weight: 600; text-decoration: none; }
-  td.papel a:hover { text-decoration: underline; }
+  td.papel a, td.setor a { color: var(--destaque); font-weight: 600; text-decoration: none; }
+  td.papel a:hover, td.setor a:hover { text-decoration: underline; }
   .pos { color: var(--bom); } .neg { color: var(--ruim); }
   .incerto { color: var(--ruim); text-align: center; }
   .ajuda {
@@ -106,6 +106,7 @@
       <button data-tipo="fiis">FIIs</button>
     </div>
     <select id="preset"><option value="">— sem preset —</option></select>
+    <select id="setor" hidden><option value="">— todos os setores —</option></select>
     <button class="botao" id="filtrar">Filtrar</button>
     <button class="botao" id="limpar">Limpar filtros</button>
     <label class="opcao" title="No Fundamentus, 0 quase sempre é dado ausente. Marque para tratá-lo como número real.">
@@ -134,7 +135,7 @@
 
 <script>
 const estado = { tipo: "acoes", config: null, ordenar: null, crescente: false,
-                 filtros: {}, preset: "", ranqueado: false, zeros: false };
+                 filtros: {}, preset: "", ranqueado: false, zeros: false, setor: "" };
 const $ = (id) => document.getElementById(id);
 
 const fmt = {
@@ -193,7 +194,10 @@ function mostrarStatus() {
   $("status").textContent =
     `MongoDB · ${s.acoes.documentos} ações e ${s.fiis.documentos} FIIs · ` +
     `atualizado em ${s.acoes.atualizado_em ?? "—"} · ` +
-    `${estado.config.status.historico.dias} dia(s) de histórico`;
+    `${estado.config.status.historico.dias} dia(s) de histórico` +
+    (estado.config.status.empresas
+      ? ` · ${estado.config.status.empresas.setores} setores`
+      : "");
 }
 
 function montarPresets() {
@@ -206,6 +210,21 @@ function montarPresets() {
     opcao.textContent = `${nome} — ${p.descricao}`;
     seletor.appendChild(opcao);
   }
+}
+
+function montarSetores() {
+  const seletor = $("setor");
+  const atual = estado.setor;
+  seletor.innerHTML = '<option value="">— todos os setores —</option>';
+  for (const nome of estado.config.setores || []) {
+    const opcao = document.createElement("option");
+    opcao.value = nome;
+    opcao.textContent = nome;
+    seletor.appendChild(opcao);
+  }
+  seletor.value = atual && [...seletor.options].some((o) => o.value === atual) ? atual : "";
+  estado.setor = seletor.value;
+  seletor.hidden = estado.tipo !== "acoes";
 }
 
 function montarFiltros() {
@@ -264,6 +283,7 @@ function parametros() {
   if (estado.ordenar) p.set("ordenar", estado.ordenar);
   if (estado.crescente) p.set("crescente", "1");
   if (estado.zeros) p.set("zeros", "1");
+  if (estado.setor) p.set("setor", estado.setor);
   if (estado.preset) {
     p.set("preset", estado.preset);
     p.set("taxa_base", $("taxa-base").value);
@@ -288,6 +308,7 @@ async function carregar() {
   estado.registros = dados.registros;
   $("resumo").innerHTML =
     `<b>${dados.encontrados}</b> de ${dados.total} ${estado.tipo === "acoes" ? "ações" : "FIIs"} passaram no filtro` +
+    (estado.setor ? ` · setor <b>${estado.setor}</b>` : "") +
     (estado.ordenar ? ` · ordenado por <b>${estado.ordenar}</b> ${estado.crescente ? "↑" : "↓"}` : "");
   desenharTabela(dados.registros);
 }
@@ -297,7 +318,7 @@ function desenharTabela(registros) {
     ? estado.config.colunas[estado.tipo].concat(estado.config.colunas_rank)
     : estado.config.colunas[estado.tipo];
   $("cabecalho").innerHTML = "<tr>" + colunas.map((c) =>
-    `<th data-chave="${c.chave}" class="${estado.ordenar === c.chave ? "ordenada" : ""}">${c.titulo}${
+    `<th data-chave="${c.chave}" class="${estado.ordenar === c.chave ? "ordenada" : ""} ${c.formato === "texto" ? "texto" : ""}">${c.titulo}${
       c.descricao ? `<span class="ajuda" title="${c.descricao.replace(/"/g, "&quot;")}">?</span>` : ""}${
       estado.ordenar === c.chave ? (estado.crescente ? " ↑" : " ↓") : ""}</th>`).join("") + "</tr>";
 
@@ -329,14 +350,17 @@ function desenharTabela(registros) {
       const url = estado.tipo === "acoes"
         ? `https://investidor10.com.br/acoes/${valor.toLowerCase()}/`
         : `https://investidor10.com.br/fiis/${valor.toUpperCase()}/`;
-      return `<td class="papel"><a href="${url}" target="_blank" rel="noopener">${valor}</a></td>`;
+      return `<td class="papel texto"><a href="${url}" target="_blank" rel="noopener">${valor}</a></td>`;
+    }
+    if (c.chave === "setor" && valor) {
+      return `<td class="setor texto"><a href="#" data-setor="${String(valor).replace(/"/g, "&quot;")}">${texto}</a></td>`;
     }
     if (c.formato === "percentual" && valor === 0) {
       return `<td class="incerto" title="Dado provavelmente ausente no Fundamentus (0%)">-</td>`;
     }
     const cor = (c.formato === "percentual" && typeof valor === "number" && valor !== 0)
       ? (valor > 0 ? "pos" : "neg") : "";
-    return `<td class="${cor}">${texto}</td>`;
+    return `<td class="${cor}${c.formato === "texto" ? " texto" : ""}">${texto}</td>`;
   }).join("") + "</tr>").join("");
 }
 
@@ -349,10 +373,12 @@ function trocarTipo(tipo, carregarAgora = true) {
   $("caixa-spread").hidden = true;
   estado.ordenar = tipo === "acoes" ? "dy" : "dy";
   estado.crescente = false;
+  estado.setor = "";
   document.querySelectorAll(".abas button").forEach((b) =>
     b.classList.toggle("ativa", b.dataset.tipo === tipo));
   $("preset").value = "";
   montarPresets();
+  montarSetores();
   montarFiltros();
   if (carregarAgora) carregar();
 }
@@ -363,6 +389,20 @@ document.querySelectorAll(".abas button").forEach((botao) =>
 $("preset").addEventListener("change", (e) => {
   preencherFiltrosDoPreset(e.target.value);
   montarFiltros();
+  carregar();
+});
+
+$("setor").addEventListener("change", (e) => {
+  estado.setor = e.target.value;
+  carregar();
+});
+
+$("corpo").addEventListener("click", (e) => {
+  const link = e.target.closest("a[data-setor]");
+  if (!link) return;
+  e.preventDefault();
+  estado.setor = link.dataset.setor;
+  $("setor").value = estado.setor;
   carregar();
 });
 
@@ -400,6 +440,8 @@ $("limpar").addEventListener("click", () => {
   $("descricao").textContent = "";
   $("caixa-spread").hidden = true;
   $("preset").value = "";
+  $("setor").value = "";
+  estado.setor = "";
   montarFiltros();
   carregar();
 });
@@ -411,7 +453,12 @@ $("sync").addEventListener("click", async (e) => {
   try {
     const dados = await (await fetch("/api/sync")).json();
     if (dados.erro) alert(dados.erro);
-    else { estado.config.status = dados.status; mostrarStatus(); await carregar(); }
+    else {
+      estado.config.status = dados.status;
+      if (dados.setores) { estado.config.setores = dados.setores; montarSetores(); }
+      mostrarStatus();
+      await carregar();
+    }
   } finally {
     botao.disabled = false;
     botao.textContent = "Atualizar do Fundamentus";

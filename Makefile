@@ -6,7 +6,7 @@ PORTA   ?= 8000
 
 .DEFAULT_GOAL := ajuda
 
-.PHONY: ajuda venv up sync web start status parar reiniciar logs mongosh limpar-cache reset
+.PHONY: ajuda venv up sync web start status parar reiniciar logs mongosh limpar-cache reset test
 
 ajuda:  ## mostra esta lista de comandos
 	@echo "Painel de investimentos — comandos disponíveis:"
@@ -41,6 +41,9 @@ status: $(PY)  ## estado do container e do banco
 	@echo
 	@$(PY) -m invest.cli status
 
+test: $(PY)  ## testes unitários (sem rede)
+	$(PY) -m unittest discover -s tests -v
+
 parar:  ## para o container (os dados ficam salvos no volume)
 	docker compose stop
 
@@ -53,7 +56,7 @@ mongosh: up  ## abre o shell do MongoDB no banco investimentos
 	docker exec -it investimentos-mongo mongosh investimentos
 
 limpar-cache:  ## apaga o cache local (força novo download no próximo sync)
-	rm -f data/acoes.json data/fiis.json
+	rm -f data/acoes.json data/fiis.json data/empresas.json
 	@echo "cache local removido."
 
 reset:  ## APAGA o banco e o volume do Docker (irreversível)
