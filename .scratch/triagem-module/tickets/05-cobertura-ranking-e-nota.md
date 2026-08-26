@@ -6,13 +6,13 @@
 
 **Blocked by:** 03 (módulo de triagem)
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Teste: a nota é calculada apenas dentro do recorte filtrado, não sobre o mercado inteiro
-- [ ] Teste: papéis com o mesmo valor num campo ranqueado recebem a mesma posição
-- [ ] Teste: papel sem valor num campo ranqueado fica sem nota
-- [ ] Teste: ordenar por nota é crescente, independentemente do sentido pedido
-- [ ] Teste: trocar a coluna de ordenação preserva os ranks já calculados
-- [ ] Teste: o resultado sinaliza que foi ranqueado, para o painel decidir se mostra as colunas de rank e nota
-- [ ] Teste: pedido sem ranking delega a ordenação ao banco e respeita o sentido pedido
-- [ ] `make test` verde
+- [x] Teste: a nota é calculada apenas dentro do recorte filtrado, não sobre o mercado inteiro
+- [x] Teste: papéis com o mesmo valor num campo ranqueado recebem a mesma posição
+- [x] Teste: papel sem valor num campo ranqueado fica sem nota
+- [x] Teste: ordenar por nota é crescente, independentemente do sentido pedido
+- [x] Teste: trocar a coluna de ordenação preserva os ranks já calculados
+- [x] Teste: o resultado sinaliza que foi ranqueado, para o painel decidir se mostra as colunas de rank e nota
+- [x] Teste: pedido sem ranking delega a ordenação ao banco e respeita o sentido pedido
+- [x] `make test` verde

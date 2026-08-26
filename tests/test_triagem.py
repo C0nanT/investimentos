@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 from invest import filtros, triagem
@@ -171,6 +172,160 @@ class TotalEEncontradosTest(unittest.TestCase):
         with patch("invest.db.banco", return_value=_banco()):
             resultado = triagem.triar(pedido)
         self.assertEqual(resultado.tipo, "acoes")
+
+
+# Recorte da aula com taxa baixa (dy min 6): A e B passam; FORA falha liquidez
+# mas tem o maior DY do mercado — se o rank olhasse o mercado inteiro, A nao
+# seria rank_dy 1. ALFA e melhor nos dois eixos (nota 2); BETA nota 4.
+FIIS_RANKING = [
+    {"papel": "ALFA11", "dy": 12.0, "pvp": 0.9, "liquidez": 3_000_000},
+    {"papel": "BETA11", "dy": 10.0, "pvp": 1.1, "liquidez": 3_000_000},
+    {"papel": "FORA11", "dy": 15.0, "pvp": 1.0, "liquidez": 500_000},
+]
+
+FIIS_EMPATE = [
+    {"papel": "IGUA11", "dy": 10.0, "pvp": 1.0, "liquidez": 3_000_000},
+    {"papel": "IGUB11", "dy": 10.0, "pvp": 0.9, "liquidez": 3_000_000},
+]
+
+FIIS_SEM_CAMPO = [
+    {"papel": "COMP11", "dy": 10.0, "pvp": 1.0, "liquidez": 3_000_000},
+    {"papel": "FALT11", "dy": 11.0, "liquidez": 3_000_000},  # sem pvp
+]
+
+
+def _banco_fiis_docs(fiis):
+    return banco_com_papeis(acoes=[], fiis=fiis)
+
+
+def _preset_rank_so_liquidez(banco):
+    """Preset que ranqueia dy+pvp mas so filtra liquidez — deixa entrar quem nao tem pvp."""
+    banco.presets.insert_one({
+        "_id": "rank-liquidez",
+        "nome": "rank-liquidez",
+        "descricao": "Rank de teste: so liquidez, rank DY+P/VP",
+        "tipo": "fiis",
+        "criterios": [["liquidez", 2_000_000, None]],
+        "ordenar_por": "nota",
+        "crescente": True,
+        "ranquear": [["dy", False], ["pvp", True]],
+    })
+    return banco
+
+
+class RankingENotaTest(unittest.TestCase):
+    def test_nota_calculada_so_no_recorte_filtrado(self):
+        # FORA11 tem DY maior que ALFA11, mas fica de fora por liquidez.
+        # No recorte, ALFA11 e rank_dy 1 (nao 2).
+        pedido = triagem.Pedido(tipo="fiis", preset="fii-aula", taxa_base=5.0, spread=1.0)
+        with patch("invest.db.banco", return_value=_banco_fiis_docs(FIIS_RANKING)):
+            resultado = triagem.triar(pedido)
+        por_papel = {r["papel"]: r for r in resultado.registros}
+        self.assertNotIn("FORA11", por_papel)
+        self.assertEqual(por_papel["ALFA11"]["rank_dy"], 1)
+        self.assertEqual(por_papel["ALFA11"]["rank_pvp"], 1)
+        self.assertEqual(por_papel["ALFA11"]["nota"], 2)
+        self.assertEqual(por_papel["BETA11"]["rank_dy"], 2)
+        self.assertEqual(por_papel["BETA11"]["rank_pvp"], 2)
+        self.assertEqual(por_papel["BETA11"]["nota"], 4)
+
+    def test_empate_recebe_a_mesma_posicao(self):
+        pedido = triagem.Pedido(tipo="fiis", preset="fii-aula", taxa_base=5.0, spread=1.0)
+        with patch("invest.db.banco", return_value=_banco_fiis_docs(FIIS_EMPATE)):
+            resultado = triagem.triar(pedido)
+        por_papel = {r["papel"]: r for r in resultado.registros}
+        self.assertEqual(por_papel["IGUA11"]["rank_dy"], por_papel["IGUB11"]["rank_dy"])
+        self.assertEqual(por_papel["IGUA11"]["rank_dy"], 1)
+
+    def test_papel_sem_valor_no_campo_ranqueado_fica_sem_nota(self):
+        banco = _preset_rank_so_liquidez(_banco_fiis_docs(FIIS_SEM_CAMPO))
+        pedido = triagem.Pedido(tipo="fiis", preset="rank-liquidez")
+        with patch("invest.db.banco", return_value=banco):
+            resultado = triagem.triar(pedido)
+        por_papel = {r["papel"]: r for r in resultado.registros}
+        self.assertEqual(por_papel["COMP11"]["nota"], 3)  # rank_dy 2 + rank_pvp 1
+        self.assertIsNone(por_papel["FALT11"]["nota"])
+        self.assertIsNone(por_papel["FALT11"]["rank_pvp"])
+        self.assertEqual(por_papel["FALT11"]["rank_dy"], 1)
+
+    def test_ordenar_por_nota_forca_crescente(self):
+        # Pedido pede decrescente; ordenar por nota ainda coloca melhor (menor nota) primeiro.
+        pedido = triagem.Pedido(
+            tipo="fiis", preset="fii-aula", taxa_base=5.0, spread=1.0, crescente=False,
+        )
+        with patch("invest.db.banco", return_value=_banco_fiis_docs(FIIS_RANKING)):
+            resultado = triagem.triar(pedido)
+        self.assertEqual([r["papel"] for r in resultado.registros], ["ALFA11", "BETA11"])
+        self.assertEqual([r["nota"] for r in resultado.registros], [2, 4])
+
+    def test_trocar_coluna_de_ordenacao_preserva_ranks(self):
+        pedido = triagem.Pedido(
+            tipo="fiis", preset="fii-aula", taxa_base=5.0, spread=1.0, ordenar_por="dy",
+        )
+        with patch("invest.db.banco", return_value=_banco_fiis_docs(FIIS_RANKING)):
+            resultado = triagem.triar(pedido)
+        por_papel = {r["papel"]: r for r in resultado.registros}
+        self.assertEqual(por_papel["ALFA11"]["rank_dy"], 1)
+        self.assertEqual(por_papel["ALFA11"]["nota"], 2)
+        self.assertEqual(por_papel["BETA11"]["rank_pvp"], 2)
+        # Ordenacao por dy decrescente (padrao do pedido): ALFA (12) antes de BETA (10).
+        self.assertEqual([r["papel"] for r in resultado.registros], ["ALFA11", "BETA11"])
+
+    def test_resultado_sinaliza_que_foi_ranqueado(self):
+        pedido = triagem.Pedido(tipo="fiis", preset="fii-aula", taxa_base=5.0, spread=1.0)
+        with patch("invest.db.banco", return_value=_banco_fiis_docs(FIIS_RANKING)):
+            resultado = triagem.triar(pedido)
+        self.assertTrue(resultado.ranqueado)
+
+    def test_sem_ranking_delega_ordenacao_ao_banco_e_respeita_sentido(self):
+        pedido = triagem.Pedido(
+            tipo="acoes", criterios=[("roe", 15.0, None)],
+            ordenar_por="roe", crescente=True,
+        )
+        with patch("invest.db.banco", return_value=_banco()):
+            resultado = triagem.triar(pedido)
+        self.assertFalse(resultado.ranqueado)
+        self.assertEqual([r["papel"] for r in resultado.registros], ["AAAA3", "BBBB3"])
+
+
+class BordasTest(unittest.TestCase):
+    def test_preset_inexistente_cai_para_triagem_sem_preset(self):
+        # Link antigo com nome que sumiu: segue sem erro e sem descricao.
+        pedido = triagem.Pedido(tipo="acoes", preset="preset-que-nao-existe-mais")
+        with patch("invest.db.banco", return_value=_banco()):
+            resultado = triagem.triar(pedido)
+        self.assertIsNone(resultado.descricao)
+        self.assertEqual(resultado.criterios, [])
+        self.assertEqual(resultado.encontrados, resultado.total)
+
+    def test_criterio_mal_escrito_mostra_formato_aceito(self):
+        # Decodificacao na borda (web chama parse_criterio antes do Pedido).
+        with self.assertRaises(ValueError) as ctx:
+            filtros.parse_criterio("dy~~6")
+        self.assertIn("use dy>=6, pvp<=1.2 ou pl=5:15", str(ctx.exception))
+
+    def test_campos_de_data_voltam_como_texto(self):
+        quando = datetime(2024, 6, 15, 12, 0, tzinfo=timezone.utc)
+        acoes = [
+            {"papel": "DATA3", "roe": 20.0, "atualizado_em": quando},
+        ]
+        pedido = triagem.Pedido(tipo="acoes")
+        with patch("invest.db.banco", return_value=banco_com_papeis(acoes=acoes, fiis=[])):
+            resultado = triagem.triar(pedido)
+        valor = resultado.registros[0]["atualizado_em"]
+        self.assertIsInstance(valor, str)
+        self.assertEqual(valor, quando.isoformat())
+
+    def test_sem_preset_e_sem_criterios_devolve_snapshot_inteiro(self):
+        pedido = triagem.Pedido(tipo="acoes")
+        with patch("invest.db.banco", return_value=_banco()):
+            resultado = triagem.triar(pedido)
+        self.assertEqual(resultado.encontrados, resultado.total)
+        self.assertEqual(resultado.total, len(ACOES_QUALIDADE))
+        self.assertEqual(
+            {r["papel"] for r in resultado.registros},
+            {a["papel"] for a in ACOES_QUALIDADE},
+        )
 
 
 if __name__ == "__main__":

@@ -8,10 +8,10 @@ Testes que espelham a montagem já criada no ticket 03.
 
 **Blocked by:** 03 (módulo de triagem)
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Teste: preset inexistente no pedido cai para triagem sem preset, sem erro e sem descrição
-- [ ] Teste: critério avulso mal escrito falha com mensagem que mostra o formato aceito
-- [ ] Teste: campos de data nos registros voltam como texto no resultado
-- [ ] Teste: pedido sem preset e sem critérios devolve o snapshot inteiro
-- [ ] `make test` verde
+- [x] Teste: preset inexistente no pedido cai para triagem sem preset, sem erro e sem descrição
+- [x] Teste: critério avulso mal escrito falha com mensagem que mostra o formato aceito
+- [x] Teste: campos de data nos registros voltam como texto no resultado
+- [x] Teste: pedido sem preset e sem critérios devolve o snapshot inteiro
+- [x] `make test` verde
