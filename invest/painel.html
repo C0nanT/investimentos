@@ -205,10 +205,10 @@
 <main>
   <div class="barra">
     <div class="abas">
-      <button data-tipo="acoes" class="ativa">Ações</button>
-      <button data-tipo="fiis">FIIs</button>
+      <button data-tipo="acoes">Ações</button>
+      <button data-tipo="fiis" class="ativa">FIIs</button>
     </div>
-    <div class="modos" id="modos" hidden>
+    <div class="modos" id="modos">
       <button data-modo="triagem" class="ativa">Triagem</button>
       <button data-modo="comparar">Comparar</button>
     </div>
@@ -281,7 +281,7 @@
 </main>
 
 <script>
-const estado = { tipo: "acoes", modo: "triagem", config: null, ordenar: null, crescente: false,
+const estado = { tipo: "fiis", modo: "triagem", config: null, ordenar: null, crescente: false,
                  filtros: {}, preset: "", ranqueado: false, zeros: false,
                  setor: "", subsetor: "", tipoFundo: "", completo: false };
 const estadoComparar = {
@@ -351,7 +351,7 @@ async function iniciar() {
   mostrarStatus();
   // Permite abrir direto num preset: /?tipo=fiis&preset=fii-aula
   const url = new URLSearchParams(location.search);
-  const tipo = url.get("tipo") === "fiis" ? "fiis" : "acoes";
+  const tipo = url.get("tipo") === "acoes" ? "acoes" : "fiis";
   const preset = url.get("preset");
   const modoParam = url.get("modo") === "comparar" ? "comparar" : "triagem";
   const papeisParam = [...new Set(url.getAll("papel").map((p) => p.trim().toUpperCase()).filter(Boolean))];
