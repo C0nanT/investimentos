@@ -7,6 +7,7 @@ Colecoes:
                      dos indicadores (util para ver se o DY se repete ou foi
                      evento isolado)
     presets       -> filtros predefinidos do painel (semente no codigo; edicao no banco)
+    config        -> valores auxiliares avulsos (ex.: ultima taxa do Tesouro IPCA+)
 """
 
 from __future__ import annotations
@@ -256,6 +257,31 @@ def status() -> dict:
         if recente_emp else None,
     }
     return info
+
+
+def salvar_ipca(taxa: float, vencimento: str, data_base: str) -> dict:
+    """Guarda a ultima taxa do Tesouro IPCA+ (mais curto) obtida com sucesso."""
+    doc = {
+        "taxa": float(taxa),
+        "vencimento": vencimento,
+        "data_base": data_base,
+        "atualizado_em": datetime.now(timezone.utc),
+    }
+    banco().config.update_one({"_id": "ipca"}, {"$set": doc}, upsert=True)
+    return doc
+
+
+def obter_ipca() -> dict | None:
+    """Ultima taxa do Tesouro IPCA+ salva, ou None se nunca foi obtida com sucesso."""
+    doc = banco().config.find_one({"_id": "ipca"})
+    if not doc:
+        return None
+    return {
+        "taxa": doc["taxa"],
+        "vencimento": doc["vencimento"],
+        "data_base": doc["data_base"],
+        "atualizado_em": doc["atualizado_em"].astimezone().strftime("%d/%m/%Y %H:%M"),
+    }
 
 
 def contar(tipo: str) -> int:

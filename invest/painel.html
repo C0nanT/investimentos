@@ -55,6 +55,13 @@
   .opcao { display: flex; align-items: center; gap: 6px; color: var(--suave); font-size: 13px; cursor: pointer; }
   .spread { display: flex; align-items: center; gap: 6px; color: var(--suave); font-size: 13px; }
   .spread input { width: 76px; padding: 5px 7px; }
+  .ipca-atualizar {
+    padding: 5px 7px; font-size: 13px; line-height: 1; border-radius: 6px;
+    border: 1px solid var(--borda); background: var(--painel); color: var(--suave); cursor: pointer;
+  }
+  .ipca-atualizar:hover { border-color: var(--destaque); color: var(--destaque); }
+  .ipca-atualizar[disabled] { opacity: .55; cursor: progress; }
+  .ipca-aviso { color: var(--ruim); font-size: 12.5px; }
   .descricao { color: var(--suave); font-size: 12.5px; margin-bottom: 10px; font-style: italic; }
   .filtros {
     background: var(--painel); border: 1px solid var(--borda); border-radius: 10px;
@@ -220,8 +227,10 @@
       <input type="checkbox" id="zeros"> considerar zeros
     </label>
     <span class="spread modo-triagem" id="caixa-spread" hidden>
-      IPCA+ <input type="number" step="0.01" id="taxa-base" value="8.17"> %
+      IPCA+ <input type="number" step="0.01" id="taxa-base" placeholder="—">
+      <button type="button" class="ipca-atualizar" id="ipca-atualizar" title="Buscar taxa atual no Tesouro Transparente">↻</button> %
       + spread <input type="number" step="0.5" id="spread" value="1"> %
+      <span class="ipca-aviso" id="ipca-aviso" hidden>⚠ preencha o IPCA+ manualmente</span>
     </span>
     <button class="botao modo-triagem" id="csv">Baixar CSV</button>
     <button class="botao" id="sync">Atualizar do Fundamentus</button>
@@ -260,8 +269,10 @@
         <input type="checkbox" id="comparar-ranquear"> ranquear (fii-aula)
       </label>
       <span class="spread" id="comparar-caixa-spread" hidden>
-        IPCA+ <input type="number" step="0.01" id="comparar-taxa-base" value="8.17"> %
+        IPCA+ <input type="number" step="0.01" id="comparar-taxa-base" placeholder="—">
+        <button type="button" class="ipca-atualizar" id="comparar-ipca-atualizar" title="Buscar taxa atual no Tesouro Transparente">↻</button> %
         + spread <input type="number" step="0.5" id="comparar-spread" value="1"> %
+        <span class="ipca-aviso" id="comparar-ipca-aviso" hidden>⚠ preencha o IPCA+ manualmente</span>
       </span>
       <button class="botao" id="comparar-csv">Baixar CSV</button>
     </div>
@@ -346,8 +357,8 @@ async function iniciar() {
   if (estado.config.erro) return falhar(
     "O servidor respondeu com erro: <code>" + estado.config.erro + "</code>. " +
     "Se for de conexão, suba o banco com <code>docker compose up -d</code>.");
-  if (estado.config.taxa_base != null) $("taxa-base").value = estado.config.taxa_base;
   if (estado.config.spread != null) $("spread").value = estado.config.spread;
+  mostrarIpca();
   mostrarStatus();
   // Permite abrir direto num preset: /?tipo=fiis&preset=fii-aula
   const url = new URLSearchParams(location.search);
@@ -375,6 +386,34 @@ function falhar(mensagem) {
   $("status").textContent = "sem conexão";
   $("resumo").innerHTML = "";
   $("corpo").innerHTML = `<tr><td class="erro" colspan="20">${mensagem}</td></tr>`;
+}
+
+function mostrarIpca() {
+  const ipca = estado.config.ipca;
+  const titulo = ipca
+    ? `Tesouro IPCA+ ${ipca.vencimento} · taxa de compra em ${ipca.data_base} (obtida em ${ipca.atualizado_em})`
+    : "";
+  for (const [campoId, avisoId] of [["taxa-base", "ipca-aviso"], ["comparar-taxa-base", "comparar-ipca-aviso"]]) {
+    $(campoId).value = ipca ? ipca.taxa : "";
+    $(campoId).title = titulo;
+    $(avisoId).hidden = Boolean(ipca);
+  }
+}
+
+async function atualizarIpca(botao) {
+  botao.disabled = true;
+  try {
+    const dados = await (await fetch("/api/ipca/sync")).json();
+    if (dados.ipca) estado.config.ipca = dados.ipca;
+    mostrarIpca();
+    if (dados.erro) alert(dados.erro);
+    else if (estado.modo === "triagem") carregar();
+    else carregarComparar();
+  } catch (erro) {
+    alert("Não consegui falar com o servidor para atualizar o IPCA+.");
+  } finally {
+    botao.disabled = false;
+  }
 }
 
 function mostrarStatus() {
@@ -510,7 +549,8 @@ function preencherFiltrosDoPreset(nome) {
   const preset = estado.config.presets[nome];
   $("caixa-spread").hidden = preset.taxa_base == null;
   if (preset.taxa_base != null) {
-    $("taxa-base").value = preset.taxa_base;
+    // Prioriza a taxa do IPCA+ obtida do Tesouro; só cai no valor salvo no preset se nunca buscamos.
+    if (estado.config.ipca) $("taxa-base").value = estado.config.ipca.taxa;
     $("spread").value = preset.spread;
   }
   // Os limites do preset viram campos preenchidos, para você ver e ajustar.
@@ -543,7 +583,7 @@ function parametros() {
   }
   if (estado.preset) {
     p.set("preset", estado.preset);
-    p.set("taxa_base", $("taxa-base").value);
+    if ($("taxa-base").value !== "") p.set("taxa_base", $("taxa-base").value);
     p.set("spread", $("spread").value);
   }
   return p;
@@ -733,7 +773,7 @@ $("salvar").addEventListener("click", async () => {
     chave, faixa.min ?? null, faixa.max ?? null,
   ]);
   const corpo = { nome: estado.preset, criterios };
-  if (!$("caixa-spread").hidden) {
+  if (!$("caixa-spread").hidden && $("taxa-base").value !== "") {
     corpo.taxa_base = Number($("taxa-base").value);
     corpo.spread = Number($("spread").value);
   }
@@ -774,7 +814,7 @@ $("zeros").addEventListener("change", (e) => { estado.zeros = e.target.checked; 
   $(id).addEventListener("change", () => {
     const taxa = Number($("taxa-base").value);
     const spread = Number($("spread").value);
-    if (!Number.isNaN(taxa) && !Number.isNaN(spread)) {
+    if ($("taxa-base").value !== "" && !Number.isNaN(taxa) && !Number.isNaN(spread)) {
       estado.filtros.dy = estado.filtros.dy || {};
       estado.filtros.dy.min = Math.round((taxa + spread) * 100) / 100;
       delete estado.filtros.dy.editado;
@@ -834,7 +874,7 @@ function parametrosComparar() {
   if (estadoComparar.zeros) p.set("zeros", "1");
   if (estadoComparar.ranquear) {
     p.set("ranquear", "1");
-    p.set("taxa_base", $("comparar-taxa-base").value);
+    if ($("comparar-taxa-base").value !== "") p.set("taxa_base", $("comparar-taxa-base").value);
     p.set("spread", $("comparar-spread").value);
   }
   return p;
@@ -1049,6 +1089,9 @@ $("comparar-ranquear").addEventListener("change", (e) => {
 
 ["comparar-taxa-base", "comparar-spread"].forEach((id) =>
   $(id).addEventListener("change", () => { if (estadoComparar.ranquear) carregarComparar(); }));
+
+$("ipca-atualizar").addEventListener("click", (e) => atualizarIpca(e.currentTarget));
+$("comparar-ipca-atualizar").addEventListener("click", (e) => atualizarIpca(e.currentTarget));
 
 $("comparar-zeros").addEventListener("change", (e) => {
   estadoComparar.zeros = e.target.checked;

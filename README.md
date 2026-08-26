@@ -174,8 +174,11 @@ Preset `fii-aula`, seguindo `notes/aula-live-geracao-dividendos.md`:
 Escolha o preset **fii-aula** na aba FIIs. Ele mostra dois campos extras,
 **IPCA+** e **spread**, que recalculam o DY mínimo na hora — 1% para fundos de
 ancoragem, 3% para crescimento, 5% para os com risco, como a aula orienta.
-Confira a taxa atual em [tesourodireto.com.br](https://www.tesourodireto.com.br/produtos/dados-sobre-titulos/rendimento-dos-titulos)
-— o valor 8,17% é o que estava na anotação, não é atualizado sozinho.
+O campo IPCA+ é buscado automaticamente (botão ↻, ou já ao abrir o painel) no
+CSV público do [Tesouro Transparente](https://www.tesourotransparente.gov.br/ckan/dataset?res_format=CSV&tags=Tesouro+Direto),
+pegando a taxa de compra do Tesouro IPCA+ de vencimento mais próximo. Se a
+busca falhar, o campo fica vazio com um aviso — preencha manualmente com o
+valor de [tesourodireto.com.br](https://www.tesourodireto.com.br/produtos/dados-sobre-titulos/rendimento-dos-titulos).
 
 O que a aula pede e o Fundamentus **não** fornece: vacância física e financeira
 separadas (só há vacância média) e alavancagem bruta (passivos/ativos). Esses

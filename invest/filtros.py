@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Iterable
 
-# Taxa do IPCA+ mais curto do Tesouro Direto, base do spread exigido dos FIIs.
-# Conferir em https://www.tesourodireto.com.br/produtos/dados-sobre-titulos/rendimento-dos-titulos
+# Semente do preset fii-aula (usada so no primeiro insert no Mongo). O painel
+# busca a taxa real do Tesouro IPCA+ em invest.tesouro e ignora este valor
+# depois disso — ver tesouro.obter_taxa_ipca().
 TAXA_BASE_PADRAO = 8.17
 SPREAD_PADRAO = 1.0
 

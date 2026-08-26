@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import comparador, db, filtros, fundamentus, triagem
+from . import comparador, db, filtros, fundamentus, tesouro, triagem
 
 PAGINA = Path(__file__).resolve().parent / "painel.html"
 
@@ -115,6 +115,7 @@ class Manipulador(BaseHTTPRequestHandler):
             if rota.path == "/api/config":
                 presets = db.listar_presets()
                 aula = presets.get("fii-aula") or {}
+                ipca = db.obter_ipca()
                 return self._enviar_json({
                     "colunas": {t: [{"chave": c, "titulo": r, "formato": f, "descricao": d}
                                      for c, r, f, d in cols]
@@ -122,8 +123,9 @@ class Manipulador(BaseHTTPRequestHandler):
                     "colunas_rank": [{"chave": c, "titulo": r, "formato": f, "descricao": d}
                                       for c, r, f, d in COLUNAS_RANK],
                     "presets": {n: _preset_publico(p) for n, p in presets.items()},
-                    "taxa_base": aula.get("taxa_base", filtros.TAXA_BASE_PADRAO),
+                    "taxa_base": ipca["taxa"] if ipca else None,
                     "spread": aula.get("spread", filtros.SPREAD_PADRAO),
+                    "ipca": ipca,
                     "percentuais": sorted(fundamentus.COLUNAS_PERCENTUAIS),
                     "setores": db.valores_distintos("acoes", "setor"),
                     "setores_principais": filtros.SETORES_PRINCIPAIS,
@@ -138,6 +140,8 @@ class Manipulador(BaseHTTPRequestHandler):
                 return self._enviar_json(self._comparar_fiis(parametros))
             if rota.path == "/api/sync":
                 return self._enviar_json(self._sincronizar())
+            if rota.path == "/api/ipca/sync":
+                return self._enviar_json(self._sincronizar_ipca())
         except ValueError as erro:
             return self._enviar_json({"erro": str(erro)}, codigo=400)
         except Exception as erro:  # devolve o erro na tela em vez de derrubar o server
@@ -262,6 +266,16 @@ class Manipulador(BaseHTTPRequestHandler):
             relatorio.append(resumo)
         return {"sync": relatorio, "status": db.status(),
                 "setores": db.valores_distintos("acoes", "setor")}
+
+    def _sincronizar_ipca(self) -> dict:
+        try:
+            info = tesouro.obter_taxa_ipca()
+        except Exception as erro:
+            return {"erro": f"nao foi possivel obter a taxa do Tesouro IPCA+: {erro}",
+                    "ipca": db.obter_ipca()}
+        ipca = db.salvar_ipca(info["taxa"], info["vencimento"], info["data_base"])
+        ipca["atualizado_em"] = ipca["atualizado_em"].astimezone().strftime("%d/%m/%Y %H:%M")
+        return {"ipca": ipca}
 
     def _enviar_json(self, dados, codigo: int = 200):
         corpo = json.dumps(dados, ensure_ascii=False, default=str).encode("utf-8")
