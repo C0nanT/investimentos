@@ -8,7 +8,7 @@ from typing import Iterable
 # busca a taxa real do Tesouro IPCA+ em invest.tesouro e ignora este valor
 # depois disso — ver tesouro.obter_taxa_ipca().
 TAXA_BASE_PADRAO = 8.17
-SPREAD_PADRAO = 1.0
+SPREAD_PADRAO = 1.2
 
 # Painel de ações: principais da B3 (nível 1) misturados com segmentos
 # populares. Fundamentus.setor ≈ subsetor B3; grupos abaixo expandem.
